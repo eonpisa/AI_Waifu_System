@@ -124,8 +124,8 @@ AI-Waifu-System
 │
 ├── ai/
 │   ├── llm.py
-│   ├── memory.py
-│   └── prompt.py
+│   ├── memory.py (추가 예정)
+│   └── prompt.py 
 │
 ├── voice/
 │   ├── stt.py
