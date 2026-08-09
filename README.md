@@ -170,13 +170,6 @@ AI가 생성한 응답이 자연스러운 일본어로만 이루어졌는지 검
   * 연동 완료
   * 현재 사용 보류
 
-## 주요 라이브러리 (Libraries)
-
-* requests
-* websockets
-* torch
-* torchaudio
-
 ## 캐릭터 시스템 (Character System)
 
 * VTube Studio Public API
