@@ -98,7 +98,7 @@ Character System과 연결하여 캐릭터 표현을 구현합니다.
 ## AI
 
 - Ollama
-- CosyVoice
+- SBV2
 
 ## 라이브러리 (Libraries)
 
