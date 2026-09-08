@@ -149,35 +149,16 @@ Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 
 
 ---
 
-# 🛠️ 기술 스택 (Tech Stack)
+# ▶️ 실행 방법 (How to Run)
 
-## 언어 (Language)
-
-* Python
-
-## AI 및 번역 (AI & Translation)
-
-* Ollama
-
-  * 캐릭터 대화 생성
-  * 한국어 → 일본어 번역
-  * Gemini 실패 시 일본어 → 한국어 fallback 번역
-  * 환경변수를 통한 대화 모델과 번역 모델 분리
-* Gemini API
-
-  * 일본어 → 한국어 자막 번역
-  * 구조화 JSON 출력과 기존 검증 로직 사용
-* JSON 형식 기반 번역 결과 검증
-* 일본어·한국어 혼합 출력 감지 및 재생성
-
-### Gemini API 설정
+## 실행 전 준비
 
 키는 아래 macOS 실행 절차의 숨김 입력으로 받습니다. `.env`, 소스, 설정 파일,
 셸 명령에 키 값을 적지 않습니다. 키 누락 또는 Gemini 실패 시 Qwen 자막으로
 전환되므로, Gemini 검수는 `provider=gemini model=gemini-3.5-flash-lite fallback_reason=none`
 로그를 기준으로 합니다.
 
-### 현재 정상 실행 기준 — macOS / zsh
+## macOS 실행 방법
 
 이 절차는 기존 개인 실행 환경 기준입니다. SBV2 소스·학습 모델·개인
 `tts_config.json`은 이 저장소에 포함하지 않습니다. 새 clone만으로 바로 실행되는
@@ -256,6 +237,8 @@ Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 
 CosyVoice 기본값이 남아 있으므로 위 명시 설정과 기존 `tts_config.json`을 사용합니다.
 Qwen 자막 폴백과 CosyVoice 음성 폴백은 별개입니다.
 
+## 테스트 실행
+
 자동 테스트는 프로젝트 루트에서 실행합니다.
 
 ```bash
@@ -263,6 +246,30 @@ Qwen 자막 폴백과 CosyVoice 음성 폴백은 별개입니다.
 ```
 
 기능별 검수 결과와 일반 실행의 남은 확인 사항은 `PROJECT_PLAN.md`에서 관리합니다.
+
+---
+
+# 🛠️ 기술 스택 (Tech Stack)
+
+## 언어 (Language)
+
+* Python
+
+## AI 및 번역 (AI & Translation)
+
+* Ollama
+
+  * 캐릭터 대화 생성
+  * 한국어 → 일본어 번역
+  * Gemini 실패 시 일본어 → 한국어 fallback 번역
+  * 환경변수를 통한 대화 모델과 번역 모델 분리
+* Gemini API
+
+  * 일본어 → 한국어 자막 번역
+  * 구조화 JSON 출력과 기존 검증 로직 사용
+* JSON 형식 기반 번역 결과 검증
+* 일본어·한국어 혼합 출력 감지 및 재생성
+
 
 ## 음성 합성 (TTS)
 
