@@ -50,6 +50,18 @@ messages = [
 # Keep conversation history and TTS source in Japanese only. Korean subtitles
 # are display-only and are never appended to this list.
 messages[0]["content"] += "\n\n重要: 返答は自然な日本語だけで書いてください。中国語、韓国語、翻訳、括弧での説明、注釈を絶対に含めないでください。"
+messages[0]["content"] += """
+
+会話の役割と事実:
+user は話しかけているユーザー、assistant はあなたです。両者の経験や予定を混同しないでください。
+user の「私」「僕」はユーザーを指し、assistant の「私」はあなたを指します。
+まず最新のユーザーの質問に直接答えてください。過去の話を尋ねられたら、この会話の user 発言を確認してください。
+誰が・いつ・誰と・何をしたか、何をする予定かを保って答えてください。
+ユーザー自身についての事実は user 発言を根拠にし、矛盾する場合は最新の明示的な訂正を優先してください。
+assistant が想像したことや自分の希望を、ユーザーの事実として扱わないでください。
+会話に根拠がない場合は、勝手に補わず分からないと伝えてください。
+口調の指示より質問への正確な回答を優先してください。ユーザーが泣いている等の感情や行動を決めつけないでください。
+"""
 
 emotion_style = {
     "happy": "밝고 기분 좋은 톤으로, 살짝 들뜬 느낌으로",
@@ -107,16 +119,13 @@ while True:
         print("JP:", japanese_input)
     style = emotion_style.get(pre_emotion, emotion_style["normal"])
 
-    styled_user_input = f"""
-    사용자의 말: {japanese_input}
-
-    이번 답변은 다음 분위기로 해:
-    {style}
-    """
-
-    messages.append({"role": "user", "content": styled_user_input})
-
-    ai_reply = generate_validated_japanese_reply(messages)
+    messages.append({"role": "user", "content": japanese_input})
+    # Apply the current delivery style to this request only, never to history.
+    request_messages = [
+        {"role": "system", "content": messages[0]["content"] + f"\n今回の口調: {style}"},
+        *[dict(message) for message in messages[1:]],
+    ]
+    ai_reply = generate_validated_japanese_reply(request_messages)
     if ai_reply is None:
         # The user turn was not answered safely, so keep no invalid exchange in
         # history and do not let subtitle or TTS consume any part of it.

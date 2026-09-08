@@ -68,14 +68,13 @@ def generate_validated_japanese_reply(messages: Sequence[dict]) -> Optional[str]
             request_messages.append({"role": "system", "content": STRICT_JAPANESE_RETRY})
         try:
             reply = chat(request_messages)
-        except Exception as exc:
-            LOGGER.error("Japanese chat request failed: %s", exc)
+        except Exception:
+            LOGGER.error("Japanese chat request failed.")
             return None
         reason = japanese_response_validation_reason(reply)
         if reason is None:
             return reply.strip()
         attempt = "regeneration" if retry else "initial generation"
-        LOGGER.debug("Rejected AI response (%s): %r", attempt, reply)
         LOGGER.debug("Validation reason (%s): %s", attempt, reason)
         LOGGER.warning("Rejected non-Japanese or annotated AI response%s.", "; regenerating" if not retry else "")
     return None

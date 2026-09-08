@@ -1,0 +1,26 @@
+# Local inference and training artifacts
+*.safetensors
+*.pth
+*.pt
+*.wav
+model_assets/
+Data/*/models/
+
+# Python environments and local configuration overrides
+.venv/
+venv/
+__pycache__/
+.env
+.env.*
+!.env.example
+local_checks/
+tts_config.local.json
+
+# Private runtime settings, authentication, and training sources
+vts_token.txt
+tts_config.json
+elaina_dataset/
+SBV2-KR-master/Data/
+SBV2-KR-master/inputs/
+Style-Bert-VITS2/Data/
+Style-Bert-VITS2/inputs/

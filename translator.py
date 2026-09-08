@@ -1,4 +1,4 @@
-"""Validated Korean/Japanese translation helpers using Ollama structured output."""
+"""Validated translation pipeline using Gemini with an Ollama fallback."""
 
 from dataclasses import dataclass
 import difflib
@@ -7,15 +7,20 @@ import logging
 import math
 import os
 import re
+from collections import Counter
 from typing import Optional
 
 from requests.exceptions import ReadTimeout
 
+from gemini_translator import (
+    GEMINI_TRANSLATOR_MODEL,
+    translate_japanese_to_korean as gemini_japanese_to_korean,
+)
 from llm import chat
 
 
 LOGGER = logging.getLogger(__name__)
-TRANSLATOR_MODEL = os.environ.get("OLLAMA_TRANSLATOR_MODEL", "qwen2.5:14b")
+TRANSLATOR_MODEL = os.environ.get("OLLAMA_TRANSLATOR_MODEL", "qwen3.5:9b")
 TRANSLATOR_TEMPERATURE = float(os.environ.get("OLLAMA_TRANSLATOR_TEMPERATURE", "0.1"))
 TRANSLATION_TIMEOUT_SECONDS = float(
     os.environ.get("OLLAMA_TRANSLATION_TIMEOUT_SECONDS", os.environ.get("OLLAMA_TIMEOUT_SECONDS", "120"))
@@ -108,7 +113,7 @@ def _is_likely_incomplete(source: str, translation: str) -> bool:
     if source_length >= 30 and translated_length < max(8, math.ceil(source_length * 0.28)):
         return True
     source_sentences = len(re.findall(r"[.!?。！？]+", source))
-    translated_sentences = len(re.findall(r"[.!?]+", translation))
+    translated_sentences = len(re.findall(r"[.!?。！？]+", translation))
     return source_sentences >= 3 and translated_sentences < source_sentences
 
 
@@ -173,7 +178,18 @@ def _korean_translation_validation_reason(source: str, translation: str) -> Opti
 
 def _valid_normalized_source(source: str, normalized: str) -> bool:
     """Allow only conservative, meaning-preserving Korean corrections."""
-    if not normalized or _HANGUL_JAMO.search(normalized) or _ENGLISH_WORD.search(normalized):
+    if not normalized:
+        return False
+    # English product/name tokens and conversational jamo (ㅋㅋ, ㅠㅠ, etc.)
+    # are valid Korean chat content. The normalizer may preserve them, but it
+    # must not invent tokens that were absent from the user's source.
+    source_english = Counter(token.casefold() for token in _ENGLISH_WORD.findall(source))
+    normalized_english = Counter(token.casefold() for token in _ENGLISH_WORD.findall(normalized))
+    if normalized_english - source_english:
+        return False
+    source_jamo = Counter(_HANGUL_JAMO.findall(source))
+    normalized_jamo = Counter(_HANGUL_JAMO.findall(normalized))
+    if normalized_jamo - source_jamo:
         return False
     if _JAPANESE_KANA.search(normalized) or _CJK_IDEOGRAPHS.search(normalized):
         return False
@@ -207,31 +223,24 @@ def _valid_normalized_source(source: str, normalized: str) -> bool:
 def _load_json_response(response: object) -> Optional[dict]:
     try:
         parsed = json.loads(response)
-    except (json.JSONDecodeError, TypeError) as exc:
-        LOGGER.warning("Translation did not return the required JSON: %s", exc)
+    except (json.JSONDecodeError, TypeError):
         return None
     return parsed if isinstance(parsed, dict) else None
 
 
-def _log_ja_to_ko_request(
-    *, stage: str, model: str, temperature: float, messages: list[dict]
-) -> None:
-    """Log request shape only; source content can contain private user speech."""
-    if os.environ.get("AI_WAIFU_DEBUG") != "1":
-        return
-    purposes = [
-        "translation-only system instructions" if item["role"] == "system" else "current Japanese source"
-        for item in messages
-    ]
-    LOGGER.debug(
-        "JA->KO request: stage=%s model=%s temperature=%s timeout=%s "
-        "format=json_schema conversation_history_included=False roles=%s purposes=%s",
-        stage,
+def _reason_code(reason: Optional[str]) -> str:
+    """Drop matched words/characters from validation reasons before logging."""
+    return (reason or "empty_translation").split(":", 1)[0]
+
+
+def _log_subtitle_provider(provider: str, model: str, fallback_reason: str) -> None:
+    """Log only the provider actually accepted, its model and fallback reasons."""
+    LOGGER.log(
+        logging.INFO if fallback_reason == "none" else logging.WARNING,
+        "JA->KO provider=%s model=%s fallback_reason=%s",
+        provider,
         model,
-        temperature,
-        TRANSLATION_TIMEOUT_SECONDS,
-        [item["role"] for item in messages],
-        purposes,
+        fallback_reason,
     )
 
 
@@ -287,13 +296,6 @@ def _translate_json(
     temperature = (
         JA_TO_KO_RETRY_TEMPERATURE if strict else JA_TO_KO_TEMPERATURE
     ) if direction == "ja_to_ko" else TRANSLATOR_TEMPERATURE
-    if direction == "ja_to_ko":
-        _log_ja_to_ko_request(
-            stage="regeneration" if strict else "initial generation",
-            model=model,
-            temperature=temperature,
-            messages=messages,
-        )
     try:
         response = chat(
             messages,
@@ -302,21 +304,13 @@ def _translate_json(
             response_format=TRANSLATION_SCHEMA,
             timeout=TRANSLATION_TIMEOUT_SECONDS,
         )
-    except ReadTimeout as exc:
-        LOGGER.warning(
-            "%s translation request timed out after %.1f seconds: %s",
-            direction,
-            TRANSLATION_TIMEOUT_SECONDS,
-            exc,
-        )
+    except ReadTimeout:
         return _TranslationAttempt(None, None, "request_timeout")
-    except Exception as exc:
-        LOGGER.error("Translation request failed: %s", exc)
+    except Exception:
         return _TranslationAttempt(None, None, "request_error")
     parsed = _load_json_response(response)
     translated = parsed.get("translation") if parsed else None
     if not isinstance(translated, str) or not translated.strip() or set(parsed) != {"translation"}:
-        LOGGER.warning("Translation JSON did not contain only a non-empty translation string.")
         return _TranslationAttempt(None, response, "json_parse_error")
     translated = translated.strip()
     if direction == "ja_to_ko":
@@ -324,15 +318,9 @@ def _translate_json(
     return _TranslationAttempt(translated, response, None, model_translation=parsed["translation"].strip())
 
 
-def _log_rejected_translation(direction: str, retry: bool, attempt: _TranslationAttempt, reason: str) -> None:
-    if os.environ.get("AI_WAIFU_DEBUG") != "1":
-        return
-    stage = "regeneration" if retry else "initial generation"
-    LOGGER.debug("Rejected %s translation (%s): %r", direction, stage, attempt.raw_response)
-    LOGGER.debug("Validation reason (%s): %s", stage, reason)
-
-
-def _translate_with_retry(source: str, direction: str) -> Optional[str]:
+def _translate_with_retry(
+    source: str, direction: str, *, fallback_reason: str = "none"
+) -> Optional[str]:
     validator = _japanese_translation_validation_reason if direction == "ko_to_ja" else _korean_translation_validation_reason
     previous_attempt = None
     previous_reason = None
@@ -348,11 +336,15 @@ def _translate_with_retry(source: str, direction: str) -> Optional[str]:
         if attempt.translation and reason is None:
             reason = validator(source, attempt.translation)
         if attempt.translation and reason is None:
+            if direction == "ja_to_ko":
+                _log_subtitle_provider("qwen", _ja_to_ko_model(), fallback_reason)
             return attempt.translation
-        _log_rejected_translation(direction, strict, attempt, reason or "empty_translation")
-        LOGGER.warning("Invalid %s translation%s.", direction, "; retrying" if not strict else "")
         previous_attempt = attempt
         previous_reason = reason or "empty_translation"
+    if direction == "ja_to_ko":
+        _log_subtitle_provider(
+            "none", "none", f"{fallback_reason};qwen_{_reason_code(previous_reason)}"
+        )
     return None
 
 
@@ -372,6 +364,15 @@ def _translate_korean_input_json(source: str, *, strict: bool) -> Optional[Korea
                 "spacing/punctuation errors, or clear STT mistakes. Never invent meaning, change "
                 "greeting time, tone, or proper names (including 일레이나/Elaina). If more than one "
                 "meaning is plausible, return status 'ambiguous' and do not translate. "
+                "Translate as the user speaking, never as an assistant replying or empathizing. "
+                "Preserve the speaker, explicit first/second-person references, tense, negation, "
+                "dates, companions and plans. Render explicit Korean first-person references "
+                "such as 내가 or 나는 as 私 in Japanese rather than dropping the subject. "
+                "Do not turn the user's own experience into a statement about the listener. "
+                "Preserve Latin product/name tokens and Korean chat expressions such as ㅋㅋ, ㅎㅎ, "
+                "ㅠㅠ, and ㅜㅜ in normalized_source when they occur in the source. In the Japanese "
+                "translation, express their meaning naturally in Japanese kana; never output Latin "
+                "letters or Korean jamo there (for example AI -> エーアイ, GPT -> ジーピーティー). "
                 "Return only JSON matching the schema. For status 'ok', normalized_source is the "
                 "conservatively corrected Korean and translation is Japanese. For status 'ambiguous', "
                 "preserve the Korean source in normalized_source and use an empty translation. "
@@ -389,15 +390,14 @@ def _translate_korean_input_json(source: str, *, strict: bool) -> Optional[Korea
             response_format=KOREAN_INPUT_SCHEMA,
             timeout=TRANSLATION_TIMEOUT_SECONDS,
         )
-    except ReadTimeout as exc:
+    except ReadTimeout:
         LOGGER.warning(
-            "Korean input translation request timed out after %.1f seconds; retrying once: %s",
+            "Korean input translation request timed out after %.1f seconds; retrying once.",
             TRANSLATION_TIMEOUT_SECONDS,
-            exc,
         )
         return None
-    except Exception as exc:
-        LOGGER.error("Korean input translation request failed: %s", exc)
+    except Exception:
+        LOGGER.error("Korean input translation request failed.")
         return None
     parsed = _load_json_response(response)
     if not parsed or set(parsed) != {"status", "normalized_source", "translation"}:
@@ -412,12 +412,16 @@ def _translate_korean_input_json(source: str, *, strict: bool) -> Optional[Korea
     normalized = normalized.strip()
     if status == "ambiguous":
         if translation.strip() or not normalized:
+            LOGGER.debug("Rejected ambiguous Korean input response: inconsistent fields")
             return None
         return KoreanInputTranslation("ambiguous", normalized, None)
     if not _valid_normalized_source(source, normalized):
+        LOGGER.debug("Rejected Korean input response: invalid normalized_source")
         return None
     translation = translation.strip()
-    if not _valid_japanese_translation(normalized, translation):
+    reason = _japanese_translation_validation_reason(normalized, translation)
+    if reason is not None:
+        LOGGER.debug("Rejected Korean input translation: %s", _reason_code(reason))
         return None
     return KoreanInputTranslation("ok", normalized, translation)
 
@@ -444,6 +448,25 @@ def korean_to_japanese(text: str) -> Optional[str]:
 
 
 def japanese_to_korean(text: str) -> Optional[str]:
-    """Translate a confirmed Japanese reply; return None rather than mislabeling it."""
+    """Translate JP->KO with Gemini first and retain Qwen as the fallback."""
     source = text.strip()
-    return _translate_with_retry(source, "ja_to_ko")
+    gemini_result = gemini_japanese_to_korean(source)
+    gemini_translation = (
+        _apply_japanese_to_korean_terms(gemini_result.translation)
+        if gemini_result.translation
+        else None
+    )
+    attempt = _TranslationAttempt(
+        gemini_translation,
+        gemini_result.raw_response,
+        gemini_result.reason,
+        model_translation=gemini_result.translation,
+    )
+    reason = attempt.reason
+    if attempt.translation and reason is None:
+        reason = _korean_translation_validation_reason(source, attempt.translation)
+    if attempt.translation and reason is None:
+        _log_subtitle_provider("gemini", GEMINI_TRANSLATOR_MODEL, "none")
+        return attempt.translation
+
+    return _translate_with_retry(source, "ja_to_ko", fallback_reason=_reason_code(reason))

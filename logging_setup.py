@@ -8,6 +8,7 @@ def configure_console_logging() -> None:
     """Enable debug logs only when explicitly requested, without duplicate handlers."""
     debug_enabled = os.environ.get("AI_WAIFU_DEBUG") == "1"
     level = logging.DEBUG if debug_enabled else logging.WARNING
+    console_level = logging.DEBUG if debug_enabled else logging.INFO
     root = logging.getLogger()
 
     console_handlers = [
@@ -29,8 +30,9 @@ def configure_console_logging() -> None:
     # Existing handlers may have been installed by logging.basicConfig() or a
     # library. They must be changed too; otherwise they still discard DEBUG.
     for handler in console_handlers:
-        handler.setLevel(level)
+        handler.setLevel(console_level)
     logging.getLogger("japanese_response").setLevel(level)
-    logging.getLogger("translator").setLevel(level)
+    # Accepted subtitle providers must be visible without raw DEBUG diagnostics.
+    logging.getLogger("translator").setLevel(console_level)
     # Application diagnostics are useful in debug mode; HTTP connection noise is not.
     logging.getLogger("urllib3").setLevel(logging.WARNING)

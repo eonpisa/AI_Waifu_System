@@ -20,7 +20,7 @@ def _ollama_api_url() -> str:
 
 
 OLLAMA_HOST = _ollama_api_url()
-CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "qwen2.5:7b")
+CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "qwen3.5:9b")
 OLLAMA_TIMEOUT_SECONDS = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "120"))
 CHAT_TEMPERATURE = min(0.3, max(0.1, float(os.environ.get("OLLAMA_CHAT_TEMPERATURE", "0.2"))))
 
@@ -30,7 +30,10 @@ def chat(messages, model=None, temperature=None, response_format=None, timeout=N
     data = {
         "model": model or CHAT_MODEL,
         "messages": messages,
-        "stream": False
+        "stream": False,
+        # Character chat and translation benefit from low latency; Ollama
+        # returns Qwen's reasoning separately, so it is unnecessary here.
+        "think": False,
     }
     data["options"] = {"temperature": CHAT_TEMPERATURE if temperature is None else temperature}
     if response_format is not None:
