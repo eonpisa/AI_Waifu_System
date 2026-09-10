@@ -75,7 +75,7 @@ class JapaneseResponseTests(unittest.TestCase):
                     with patch("japanese_response.chat", side_effect=replies) as chat:
                         with patch("tts.speak", return_value=False) as speak:
                             with contextlib.redirect_stdout(io.StringIO()):
-                                state = runpy.run_path(str(Path(__file__).resolve().parents[1] / "main.py"))
+                                state = runpy.run_path(str(Path(__file__).resolve().parents[1] / "main.py"), run_name="__main__")
         return state, chat, subtitle, speak
 
     def test_main_preserves_roles_and_applies_only_current_style_on_retry(self):

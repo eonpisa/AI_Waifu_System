@@ -2,6 +2,7 @@ import threading
 import asyncio
 import os
 import logging
+import time
 
 
 from logging_setup import configure_console_logging
@@ -9,7 +10,7 @@ from translator import japanese_to_korean, translate_korean_input
 from japanese_response import generate_validated_japanese_reply
 from subtitle_ui import format_korean_subtitle
 from tts import speak
-from vts import apply_expression
+from vts import apply_expression, prepare_lip_sync
 from audio_playback import play_wav
 from emotion import (
     detect_emotion,
@@ -17,9 +18,6 @@ from emotion import (
     limit_text,
     apply_emotion_to_tts
 )
-
-
-configure_console_logging()
 
 
 messages = [
@@ -61,6 +59,13 @@ user の「私」「僕」はユーザーを指し、assistant の「私」は�
 assistant が想像したことや自分の希望を、ユーザーの事実として扱わないでください。
 会話に根拠がない場合は、勝手に補わず分からないと伝えてください。
 口調の指示より質問への正確な回答を優先してください。ユーザーが泣いている等の感情や行動を決めつけないでください。
+
+話し方:
+日常の会話で使う、短く自然な日本語の話し言葉で答えてください。
+基本は親しみやすい「です・ます」の丁寧な口語を使い、明示的な口調変更の依頼がない限り、無理にため口へ変えないでください。
+必要のない「あなた」などの直接の呼びかけや、「光栄です」などの過度に儀礼的な表現を付け足さないでください。
+主語や呼びかけを省いても意味が伝わる場合は省き、相手の話の内容に直接答えてください。
+文脈上必要な敬意や言葉の意味は保ち、親しみやすさのために事実や感情を大げさにしないでください。
 """
 
 emotion_style = {
@@ -75,89 +80,139 @@ emotion_style = {
 
 MAX_HISTORY = 12
 
-def run_expression(emotion, duration=4.0):
-    asyncio.run(apply_expression(emotion, duration=duration))
+def run_expression(emotion, duration=4.0, stop_event=None, lip_sync=None):
+    try:
+        asyncio.run(apply_expression(
+            emotion, duration=duration, stop_event=stop_event, lip_sync=lip_sync,
+        ))
+    except Exception:
+        # Never expose transport errors, credentials or a worker traceback.
+        logging.getLogger("vts").warning("VTS skipped: worker_error")
 
-input("초기 입력 버퍼 제거용. Enter를 눌러 시작: ")
 
-while True:
-    user_input = input("너: ")
-    print("입력값:", repr(user_input))
+def play_with_expression(emotion):
+    lip_sync = prepare_lip_sync("output.wav")
+    stop_event = threading.Event()
+    worker = threading.Thread(
+        target=run_expression,
+        kwargs={"emotion": emotion, "duration": None, "stop_event": stop_event,
+                "lip_sync": lip_sync},
+        name="vts-expression",
+        daemon=True,
+    )
+    started = False
+    try:
+        try:
+            worker.start()
+            started = True
+        except RuntimeError:
+            logging.getLogger("vts").warning("VTS skipped: worker_start_failed")
+        if lip_sync is not None:
+            # afplay is blocking; this marks its launch, not a hardware callback.
+            lip_sync.started_at = time.monotonic()
+        return play_wav("output.wav")
+    finally:
+        stop_event.set()
+        if started:
+            # The VTS coroutine cancels pending I/O and bounds socket closure.
+            # Finish this worker before accepting another turn: never overlap.
+            worker.join()
 
-    if user_input.lower().strip() in [
-        "d:\\ai_agent\\venv\\scripts\\activate",
-        "venv\\scripts\\activate",
-        "activate"
-    ]:
-        print("터미널 명령어 대화 입력에서 무시.")
-        continue
+def run_cli():
+    global messages
+    configure_console_logging()
+    input("초기 입력 버퍼 제거용. Enter를 눌러 시작: ")
 
-    if not user_input.strip():
-        continue
+    while True:
+        user_input = input("너: ")
+        print("입력값:", repr(user_input))
 
-    if user_input.strip() == "종료":
-        break
+        if user_input.lower().strip() in [
+            "d:\\ai_agent\\venv\\scripts\\activate",
+            "venv\\scripts\\activate",
+            "activate"
+        ]:
+            print("터미널 명령어 대화 입력에서 무시.")
+            continue
 
-    if user_input.strip() == "기록초기화":
-        messages = [messages[0]]
-        print("대화 기록 초기화 완료.")
-        continue
+        if not user_input.strip():
+            continue
 
-    # Emotion remains based on the original Korean input, before translation.
-    pre_emotion = detect_emotion(user_input, "")
-    input_translation = translate_korean_input(user_input)
-    if input_translation is None:
-        print("입력 번역에 실패했습니다. Ollama 번역 모델 연결을 확인한 뒤 다시 시도해 주세요.")
-        continue
-    if input_translation.status == "ambiguous":
-        print("입력이 조금 불분명합니다. 다시 말하거나 입력해 주세요.")
-        continue
-    japanese_input = input_translation.translation
-    if input_translation.normalized_source != user_input.strip():
-        print(f"입력 보정: '{user_input}' → '{input_translation.normalized_source}'")
-    if japanese_input != user_input:
-        print("JP:", japanese_input)
-    style = emotion_style.get(pre_emotion, emotion_style["normal"])
+        if user_input.strip() == "종료":
+            break
 
-    messages.append({"role": "user", "content": japanese_input})
-    # Apply the current delivery style to this request only, never to history.
-    request_messages = [
-        {"role": "system", "content": messages[0]["content"] + f"\n今回の口調: {style}"},
-        *[dict(message) for message in messages[1:]],
-    ]
-    ai_reply = generate_validated_japanese_reply(request_messages)
-    if ai_reply is None:
-        # The user turn was not answered safely, so keep no invalid exchange in
-        # history and do not let subtitle or TTS consume any part of it.
-        messages.pop()
-        print("AI 일본어 응답 검증에 실패했습니다. 이번 응답은 재생·자막·기록에 사용하지 않습니다.")
-        continue
+        if user_input.strip() == "기록초기화":
+            messages = [messages[0]]
+            print("대화 기록 초기화 완료.")
+            continue
 
-    emotion = pre_emotion
-    print("감정:", emotion)
+        # Emotion remains based on the original Korean input, before translation.
+        pre_emotion = detect_emotion(user_input, "")
+        input_translation = translate_korean_input(user_input)
+        if input_translation is None:
+            print("입력 번역에 실패했습니다. Ollama 번역 모델 연결을 확인한 뒤 다시 시도해 주세요.")
+            continue
+        if input_translation.status == "ambiguous":
+            print("입력이 조금 불분명합니다. 다시 말하거나 입력해 주세요.")
+            continue
+        japanese_input = input_translation.translation
+        if input_translation.normalized_source != user_input.strip():
+            print(f"입력 보정: '{user_input}' → '{input_translation.normalized_source}'")
+        if japanese_input != user_input:
+            print("JP:", japanese_input)
+        style = emotion_style.get(pre_emotion, emotion_style["normal"])
 
-    print("AI (JP):", ai_reply)
-    korean_subtitle = japanese_to_korean(ai_reply)
-    print(format_korean_subtitle(korean_subtitle))
+        messages.append({"role": "user", "content": japanese_input})
+        # Apply the current delivery style to this request only, never to history.
+        request_messages = [
+            {"role": "system", "content": messages[0]["content"] + (
+                f"\n今回の口調: {style}\n"
+                "この雰囲気は感情の表現に反映し、ユーザーが明示的に求めない限り、"
+                "ユーザーがため口でも返答は丁寧な話し言葉（です・ます）を保ってください。"
+                "不要な呼びかけや状況描写を足さず、質問や気持ちに短く直接答えてください。"
+                "話し方の参考例：「そうなんですね。少し休みましょうか。」"
+                "「それは嬉しいですね。どんなことがあったんですか？」。"
+                "例の内容を会話の事実として扱わず、その丁寧で自然な話し方だけを参考にしてください。"
+            )},
+            *[dict(message) for message in messages[1:]],
+        ]
+        ai_reply = generate_validated_japanese_reply(request_messages)
+        if ai_reply is None:
+            # The user turn was not answered safely, so keep no invalid exchange in
+            # history and do not let subtitle or TTS consume any part of it.
+            messages.pop()
+            print("AI 일본어 응답 검증에 실패했습니다. 이번 응답은 재생·자막·기록에 사용하지 않습니다.")
+            continue
 
-    tts_text = clean_for_tts(ai_reply)
-    tts_text, speed = apply_emotion_to_tts(tts_text, emotion)
-    tts_text = limit_text(tts_text)
+        emotion = pre_emotion
+        print("감정:", emotion)
 
-    print("TTS용 문장:", tts_text)
-    print("속도:", speed)
+        print("AI (JP):", ai_reply)
+        korean_subtitle = japanese_to_korean(ai_reply)
+        print(format_korean_subtitle(korean_subtitle))
 
-    if tts_text:
-        ok = speak(tts_text, speed, emotion, 6.0)
-        if ok:
-            if not play_wav("output.wav"):
-                logging.error("TTS audio was created but could not be played.")
+        tts_text = clean_for_tts(ai_reply)
+        tts_text, speed = apply_emotion_to_tts(tts_text, emotion)
+        tts_text = limit_text(tts_text)
+
+        print("TTS용 문장:", tts_text)
+        print("속도:", speed)
+
+        if tts_text:
+            ok = speak(tts_text, speed, emotion, 6.0)
+            if ok:
+                if not play_with_expression(emotion):
+                    logging.error("TTS audio was created but could not be played.")
+            else:
+                print("TTS 생성 실패: output.wav 생성에 실패했습니다.")
         else:
-            print("TTS 생성 실패: output.wav 생성에 실패했습니다.")
-    else:
-        print("TTS로 읽을 문장이 없음")
+            print("TTS로 읽을 문장이 없음")
 
-    messages.append({"role": "assistant", "content": ai_reply})
+        messages.append({"role": "assistant", "content": ai_reply})
 
-    if len(messages) > MAX_HISTORY + 1:
-        messages = [messages[0]] + messages[-MAX_HISTORY:]
+        if len(messages) > MAX_HISTORY + 1:
+            messages = [messages[0]] + messages[-MAX_HISTORY:]
+
+
+if __name__ == "__main__":
+    run_cli()
