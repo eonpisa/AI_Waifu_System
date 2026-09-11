@@ -14,9 +14,9 @@ import unittest
 import wave
 from unittest.mock import AsyncMock, Mock, patch
 
-import vts
-from emotion import expression_presets
-from translator import KoreanInputTranslation
+from backend.character import vts
+from backend.character.emotion import expression_presets
+from backend.translation.translator import KoreanInputTranslation
 
 
 MAIN = Path(__file__).resolve().parents[1] / "main.py"
@@ -38,8 +38,8 @@ class VTSProtocolTests(unittest.IsolatedAsyncioTestCase):
         for emotion, preset in [("happy", "happy"), ("unknown", "normal")]:
             with self.subTest(emotion=emotion):
                 ws, connection = self.connection()
-                with patch("vts.websockets.connect", return_value=connection) as connect:
-                    with patch("vts.auth", new=AsyncMock(return_value=True)):
+                with patch("backend.character.vts.websockets.connect", return_value=connection) as connect:
+                    with patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
                         with contextlib.redirect_stdout(io.StringIO()):
                             await vts.apply_expression(emotion, duration=0.001)
                 message = json.loads(ws.send.call_args.args[0])
@@ -56,15 +56,15 @@ class VTSProtocolTests(unittest.IsolatedAsyncioTestCase):
                 connection.__aexit__.assert_awaited_once()
 
     async def test_connection_failure_is_sanitized(self):
-        with patch("vts.websockets.connect", side_effect=OSError("private token / response")):
+        with patch("backend.character.vts.websockets.connect", side_effect=OSError("private token / response")):
             with self.assertLogs("vts", level="WARNING") as logs:
                 await vts.apply_expression("happy")
         self.assertEqual(logs.output, ["WARNING:vts:VTS skipped: connection_failed"])
 
     async def test_authentication_failure_skips_parameter_injection(self):
         ws, connection = self.connection()
-        with patch("vts.websockets.connect", return_value=connection):
-            with patch("vts.auth", new=AsyncMock(return_value=False)):
+        with patch("backend.character.vts.websockets.connect", return_value=connection):
+            with patch("backend.character.vts.auth", new=AsyncMock(return_value=False)):
                 with self.assertLogs("vts", level="WARNING") as logs:
                     await vts.apply_expression("happy")
         ws.send.assert_not_awaited()
@@ -78,8 +78,8 @@ class VTSProtocolTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(reason=reason):
                 ws, connection = self.connection()
                 ws.recv.return_value = response
-                with patch("vts.websockets.connect", return_value=connection):
-                    with patch("vts.auth", new=AsyncMock(return_value=True)):
+                with patch("backend.character.vts.websockets.connect", return_value=connection):
+                    with patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
                         with self.assertLogs("vts", level="WARNING") as logs:
                             await vts.apply_expression("happy")
                 self.assertEqual(logs.output, [f"WARNING:vts:VTS skipped: {reason}"])
@@ -96,8 +96,8 @@ class VTSProtocolTests(unittest.IsolatedAsyncioTestCase):
                     auth.side_effect = stalled
                 else:
                     getattr(ws, phase).side_effect = stalled
-                with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", auth):
-                    with patch("vts.IO_TIMEOUT", 0.01):
+                with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", auth):
+                    with patch("backend.character.vts.IO_TIMEOUT", 0.01):
                         with self.assertLogs("vts", level="WARNING") as logs:
                             await asyncio.wait_for(vts.apply_expression("happy"), timeout=1)
                 self.assertEqual(logs.output, ["WARNING:vts:VTS skipped: timeout"])
@@ -123,7 +123,7 @@ class VTSProtocolTests(unittest.IsolatedAsyncioTestCase):
                     auth.side_effect = stalled
                 else:
                     ws.recv.side_effect = stalled
-                with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", auth):
+                with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", auth):
                     job = asyncio.create_task(vts.apply_expression("happy", stop_event=stop))
                     try:
                         await asyncio.wait_for(entered.wait(), timeout=1)
@@ -139,12 +139,12 @@ class VTSProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_already_stopped_never_connects(self):
         stop = threading.Event()
         stop.set()
-        with patch("vts.websockets.connect") as connect:
+        with patch("backend.character.vts.websockets.connect") as connect:
             await vts.apply_expression("happy", stop_event=stop)
         connect.assert_not_called()
 
     async def test_unlimited_duration_without_stop_signal_is_rejected(self):
-        with patch("vts.websockets.connect") as connect:
+        with patch("backend.character.vts.websockets.connect") as connect:
             with self.assertLogs("vts", level="WARNING") as logs:
                 await asyncio.wait_for(vts.apply_expression("happy", duration=None), timeout=1)
         connect.assert_not_called()
@@ -153,8 +153,8 @@ class VTSProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_standalone_default_still_finishes_after_four_seconds(self):
         ws, connection = self.connection()
         start = time.monotonic()
-        with patch("vts.websockets.connect", return_value=connection):
-            with patch("vts.auth", new=AsyncMock(return_value=True)):
+        with patch("backend.character.vts.websockets.connect", return_value=connection):
+            with patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
                 with contextlib.redirect_stdout(io.StringIO()):
                     await asyncio.wait_for(vts.apply_expression("happy"), timeout=7)
         self.assertGreaterEqual(time.monotonic() - start, 4.0)
@@ -176,17 +176,19 @@ class MainVTSIntegrationTests(unittest.TestCase):
             KoreanInputTranslation("ok", "조금 힘들어", "少し疲れました。"),
         ]
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("logging_setup.configure_console_logging"))
+            stack.enter_context(patch("backend.logging_setup.configure_console_logging"))
             stack.enter_context(patch("builtins.input", side_effect=read))
-            stack.enter_context(patch("translator.translate_korean_input", side_effect=translations))
-            stack.enter_context(patch("translator.japanese_to_korean", return_value="알겠어요"))
-            stack.enter_context(patch("japanese_response.chat", return_value="わかりました。"))
-            stack.enter_context(patch("vts.apply_expression", side_effect=apply))
-            stack.enter_context(patch("vts.prepare_lip_sync", return_value=lip_sync))
-            stack.enter_context(patch("tts.speak", side_effect=speak))
-            stack.enter_context(patch("audio_playback.play_wav", side_effect=play))
+            stack.enter_context(patch("backend.translation.translator.translate_korean_input", side_effect=translations))
+            stack.enter_context(patch("backend.translation.translator.japanese_to_korean", return_value="알겠어요"))
+            stack.enter_context(patch("backend.conversation.japanese_response.chat", return_value="わかりました。"))
+            stack.enter_context(patch("backend.character.vts.apply_expression", side_effect=apply))
+            stack.enter_context(patch("backend.character.vts.prepare_lip_sync", return_value=lip_sync))
+            stack.enter_context(patch("backend.voice.tts.speak", side_effect=speak))
+            stack.enter_context(patch("backend.voice.audio_playback.play_wav", side_effect=play))
             stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
-            return runpy.run_path(str(MAIN), run_name="__main__")
+            entry = runpy.run_path(str(MAIN))
+            session = entry["run_cli"]()
+            return {"messages": session.messages}
 
     def test_two_turns_use_emotion_and_stop_workers_before_next_input(self):
         active = set()
@@ -272,7 +274,7 @@ class MainVTSIntegrationTests(unittest.TestCase):
             self.assertTrue(all(not worker.is_alive() for worker in workers))
             self.assertTrue(all(event.is_set() for event in stop_events))
 
-        with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", new=AsyncMock(return_value=True)):
+        with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
             state = self.run_dialogue(speak, play, apply, on_input)
         self.assertEqual(len(workers), 2)
         self.assertEqual(len(state["messages"]), 5)
@@ -317,7 +319,7 @@ class MainVTSIntegrationTests(unittest.TestCase):
                 connect = Mock(return_value=connection)
                 if failure == "connection":
                     connect.side_effect = OSError("private token")
-                with patch("vts.websockets.connect", connect), patch("vts.auth", new=AsyncMock(return_value=False)):
+                with patch("backend.character.vts.websockets.connect", connect), patch("backend.character.vts.auth", new=AsyncMock(return_value=False)):
                     with self.assertLogs("vts", level="WARNING") as logs:
                         state = self.run_dialogue(speak, play_audio, apply)
                 self.assertEqual(play.call_count, 2)
@@ -355,7 +357,7 @@ class MainVTSIntegrationTests(unittest.TestCase):
             if workers:
                 self.assertTrue(cancelled.is_set())
 
-        with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", side_effect=auth):
+        with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", side_effect=auth):
             with self.assertLogs(level="ERROR"):
                 state = self.run_dialogue(speak, play, real_apply, on_input)
         self.assertEqual(len(workers), 2)
@@ -528,7 +530,7 @@ class LipSyncProtocolTests(unittest.IsolatedAsyncioTestCase):
             return False
 
         connection.__aexit__.side_effect = closed
-        with patch("vts.websockets.connect", return_value=connection) as connect, patch("vts.auth", new=AsyncMock(return_value=True)):
+        with patch("backend.character.vts.websockets.connect", return_value=connection) as connect, patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
             with contextlib.redirect_stdout(io.StringIO()):
                 await vts.apply_expression("happy", duration=0.085, lip_sync=self.lip())
         connect.assert_called_once()
@@ -542,7 +544,7 @@ class LipSyncProtocolTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_other_model_keeps_expression_without_injecting_mouth(self):
         ws, connection = self.connection("another-model")
-        with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", new=AsyncMock(return_value=True)):
+        with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
             with self.assertLogs("vts", level="WARNING") as logs, contextlib.redirect_stdout(io.StringIO()):
                 await vts.apply_expression("happy", duration=0.001, lip_sync=self.lip())
         self.assertEqual(logs.output, ["WARNING:vts:VTS lip sync skipped: model_not_calibrated"])
@@ -564,7 +566,7 @@ class LipSyncProtocolTests(unittest.IsolatedAsyncioTestCase):
                     return await receive()
 
                 ws.recv.side_effect = stalled_receive
-                with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", new=AsyncMock(return_value=True)):
+                with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
                     job = asyncio.create_task(vts.apply_expression("happy", duration=None, stop_event=stop, lip_sync=self.lip()))
                     await asyncio.wait_for(entered.wait(), 1)
                     if external:
@@ -588,7 +590,7 @@ class LipSyncProtocolTests(unittest.IsolatedAsyncioTestCase):
             await send(raw)
 
         ws.send.side_effect = disconnected
-        with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", new=AsyncMock(return_value=True)):
+        with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
             with self.assertLogs("vts", level="WARNING") as logs:
                 await asyncio.wait_for(vts.apply_expression("happy", lip_sync=self.lip()), 1)
         self.assertEqual(logs.output, [
@@ -613,7 +615,7 @@ class LipSyncProtocolTests(unittest.IsolatedAsyncioTestCase):
 
         ws.send.side_effect = slow
         lip.started_at = time.monotonic()
-        with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", new=AsyncMock(return_value=True)):
+        with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", new=AsyncMock(return_value=True)):
             with contextlib.redirect_stdout(io.StringIO()):
                 await vts.apply_expression("happy", duration=0.27, lip_sync=lip)
         self.assertGreaterEqual(len(observed), 2)
@@ -631,7 +633,7 @@ class LipSyncProtocolTests(unittest.IsolatedAsyncioTestCase):
             return await receive()
 
         ws.recv.side_effect = stalled_reset
-        with patch("vts.websockets.connect", return_value=connection), patch("vts.auth", new=AsyncMock(return_value=True)), patch("vts.MOUTH_RESET_TIMEOUT", 0.02):
+        with patch("backend.character.vts.websockets.connect", return_value=connection), patch("backend.character.vts.auth", new=AsyncMock(return_value=True)), patch("backend.character.vts.MOUTH_RESET_TIMEOUT", 0.02):
             with self.assertLogs("vts", level="WARNING") as logs, contextlib.redirect_stdout(io.StringIO()):
                 await asyncio.wait_for(vts.apply_expression("happy", duration=0.001, lip_sync=self.lip()), 1)
         self.assertEqual(logs.output, ["WARNING:vts:VTS lip sync: mouth_reset_failed"])

@@ -12,14 +12,14 @@ from typing import Optional
 
 from requests.exceptions import ReadTimeout
 
-from gemini_translator import (
+from backend.translation.gemini_translator import (
     GEMINI_TRANSLATOR_MODEL,
     translate_japanese_to_korean as gemini_japanese_to_korean,
 )
-from llm import chat
+from backend.conversation.llm import chat
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__.rsplit(".", 1)[-1])
 TRANSLATOR_MODEL = os.environ.get("OLLAMA_TRANSLATOR_MODEL", "qwen3.5:9b")
 TRANSLATOR_TEMPERATURE = float(os.environ.get("OLLAMA_TRANSLATOR_TEMPERATURE", "0.1"))
 TRANSLATION_TIMEOUT_SECONDS = float(

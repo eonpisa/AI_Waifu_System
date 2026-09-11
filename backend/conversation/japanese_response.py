@@ -4,10 +4,10 @@ import logging
 import re
 from typing import Optional, Sequence
 
-from llm import chat
+from backend.conversation.llm import chat
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__.rsplit(".", 1)[-1])
 _KANA = re.compile(r"[\u3040-\u30ff]")
 _HANGUL = re.compile(r"[\uac00-\ud7a3]")
 _LATIN_WORD = re.compile(r"[A-Za-z]{2,}")

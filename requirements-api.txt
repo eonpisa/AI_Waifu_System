@@ -1,0 +1,6 @@
+# API-only dependencies; existing model/voice dependencies stay separate.
+# These versions are already installed in the verified project .venv.
+fastapi==0.115.6
+uvicorn==0.30.0
+pydantic==2.7.0
+websockets==12.0

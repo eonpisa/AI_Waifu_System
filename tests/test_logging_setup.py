@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from logging_setup import configure_console_logging
+from backend.logging_setup import configure_console_logging
 
 
 class LoggingSetupTests(unittest.TestCase):
@@ -44,11 +44,11 @@ class LoggingSetupTests(unittest.TestCase):
         self.assertIn("Validation reason (initial generation): latin_word", output)
 
     def test_debug_mode_overrides_existing_warning_handler_for_real_validation(self):
-        from japanese_response import generate_validated_japanese_reply
+        from backend.conversation.japanese_response import generate_validated_japanese_reply
 
         self.handler.setLevel(logging.WARNING)
         with patch.dict(os.environ, {"AI_WAIFU_DEBUG": "1"}, clear=False):
-            with patch("japanese_response.chat", side_effect=["Hello、こんにちは", "Note: こんにちは"]):
+            with patch("backend.conversation.japanese_response.chat", side_effect=["Hello、こんにちは", "Note: こんにちは"]):
                 configure_console_logging()
                 self.assertEqual(self.handler.level, logging.DEBUG)
                 self.assertEqual(logging.getLogger("japanese_response").level, logging.DEBUG)
@@ -72,13 +72,13 @@ class LoggingSetupTests(unittest.TestCase):
         self.assertIn("visible warning", output)
 
     def test_default_mode_shows_accepted_gemini_provider_once_without_debug(self):
-        import gemini_translator
-        from translator import japanese_to_korean
+        from backend.translation import gemini_translator
+        from backend.translation.translator import japanese_to_korean
 
         self.handler.setLevel(logging.WARNING)
         result = gemini_translator.GeminiTranslationResult("안녕하세요", "private raw response", None)
         with patch.dict(os.environ, {"AI_WAIFU_DEBUG": "0"}, clear=False):
-            with patch("translator.gemini_japanese_to_korean", return_value=result), patch("translator.chat") as chat_mock:
+            with patch("backend.translation.translator.gemini_japanese_to_korean", return_value=result), patch("backend.translation.translator.chat") as chat_mock:
                 configure_console_logging()
                 configure_console_logging()
                 self.assertEqual(japanese_to_korean("こんにちは"), "안녕하세요")

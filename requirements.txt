@@ -1,0 +1,22 @@
+# Python 3.11: current CLI + local FastAPI + automatic tests.
+# Direct dependency versions observed in the working project .venv.
+# This is not a full environment lockfile or an SBV2 server installation list.
+
+# Ollama HTTP requests and Gemini REST translation (no separate SDK required).
+requests==2.34.2
+
+# FastAPI, Uvicorn, Pydantic and websockets (also used by VTS).
+-r requirements-api.txt
+
+# FastAPI TestClient used by tests/test_api.py.
+httpx==0.28.1
+
+# Optional data preparation only: scripts/download_elaina.py (not needed for dialogue).
+# datasets==5.0.1
+# soundfile==0.12.1
+
+# backend/conversation/legacy_ai.py imports openai, but is not used by the CLI/API.
+# openai is not installed in the verified environment; no version guessed here.
+# CosyVoice is on hold: do not install torch/torchaudio/cosyvoice for this client.
+# Install/configure SBV2 separately using its own server requirements.
+# macOS afplay / Windows winsound are system facilities, not pip packages.

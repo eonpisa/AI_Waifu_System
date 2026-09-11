@@ -5,7 +5,7 @@ import runpy
 import unittest
 from unittest.mock import patch
 
-from japanese_response import (
+from backend.conversation.japanese_response import (
     generate_validated_japanese_reply,
     is_valid_japanese_response,
     japanese_response_validation_reason,
@@ -18,7 +18,7 @@ class JapaneseResponseTests(unittest.TestCase):
             "こんにちは！今日はいい天気ですね。是如何呢？天气不错吧？",
             "こんにちは！今日はいい天気ですね。",
         ]
-        with patch("japanese_response.chat", side_effect=replies) as chat_mock:
+        with patch("backend.conversation.japanese_response.chat", side_effect=replies) as chat_mock:
             reply = generate_validated_japanese_reply([{"role": "user", "content": "こんにちは"}])
         self.assertEqual(reply, "こんにちは！今日はいい天気ですね。")
         self.assertEqual(chat_mock.call_count, 2)
@@ -42,12 +42,12 @@ class JapaneseResponseTests(unittest.TestCase):
 
     def test_two_invalid_responses_return_none_for_downstream_skip(self):
         history = [{"role": "user", "content": "こんにちは"}]
-        with patch("japanese_response.chat", side_effect=["你好", "Note: こんにちは"]):
+        with patch("backend.conversation.japanese_response.chat", side_effect=["你好", "Note: こんにちは"]):
             self.assertIsNone(generate_validated_japanese_reply(history))
         self.assertEqual(history, [{"role": "user", "content": "こんにちは"}])
 
     def test_logs_each_rejected_generation_and_reason_at_debug_level(self):
-        with patch("japanese_response.chat", side_effect=["Hello、こんにちは", "Note: こんにちは"]):
+        with patch("backend.conversation.japanese_response.chat", side_effect=["Hello、こんにちは", "Note: こんにちは"]):
             with self.assertLogs("japanese_response", level="DEBUG") as logs:
                 self.assertIsNone(generate_validated_japanese_reply([]))
         joined = "\n".join(logs.output)
@@ -57,25 +57,28 @@ class JapaneseResponseTests(unittest.TestCase):
         self.assertIn("Validation reason (regeneration): annotation", joined)
 
     def test_request_error_does_not_log_exception_contents(self):
-        with patch("japanese_response.chat", side_effect=RuntimeError("private headers and response")):
+        with patch("backend.conversation.japanese_response.chat", side_effect=RuntimeError("private headers and response")):
             with self.assertLogs("japanese_response", level="DEBUG") as logs:
                 self.assertIsNone(generate_validated_japanese_reply([]))
         self.assertNotIn("private headers and response", "\n".join(logs.output))
 
     def run_main_dialogue(self, replies):
-        from translator import KoreanInputTranslation
+        from backend.translation.translator import KoreanInputTranslation
 
         translated = [
             KoreanInputTranslation("ok", "힘들었어", "私は疲れました。"),
             KoreanInputTranslation("ok", "내일 산책할 거야", "私は明日散歩します。"),
         ]
-        with patch("logging_setup.configure_console_logging"), patch("builtins.input", side_effect=["", "힘들었어", "내일 산책할 거야", "종료"]):
-            with patch("translator.translate_korean_input", side_effect=translated):
-                with patch("translator.japanese_to_korean", return_value="알겠어요") as subtitle:
-                    with patch("japanese_response.chat", side_effect=replies) as chat:
-                        with patch("tts.speak", return_value=False) as speak:
+        with patch("backend.logging_setup.configure_console_logging"), patch("builtins.input", side_effect=["", "힘들었어", "내일 산책할 거야", "종료"]):
+            with patch("backend.translation.translator.translate_korean_input", side_effect=translated):
+                with patch("backend.translation.translator.japanese_to_korean", return_value="알겠어요") as subtitle:
+                    with patch("backend.conversation.japanese_response.chat", side_effect=replies) as chat:
+                        with patch("backend.voice.tts.speak", return_value=False) as speak:
                             with contextlib.redirect_stdout(io.StringIO()):
-                                state = runpy.run_path(str(Path(__file__).resolve().parents[1] / "main.py"), run_name="__main__")
+                                entry = runpy.run_path(str(Path(__file__).resolve().parents[1] / "main.py"))
+                                session = entry["run_cli"]()
+        from backend.conversation.service import emotion_style
+        state = {"messages": session.messages, "emotion_style": emotion_style}
         return state, chat, subtitle, speak
 
     def test_main_preserves_roles_and_applies_only_current_style_on_retry(self):

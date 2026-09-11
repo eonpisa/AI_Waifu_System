@@ -22,11 +22,11 @@ class MainImportTests(unittest.TestCase):
                 "subprocess.Popen",
                 "threading.Thread.start",
                 "requests.sessions.Session.request",
-                "logging_setup.configure_console_logging",
-                "tts.speak",
-                "audio_playback.play_wav",
-                "vts.apply_expression",
-                "vts.prepare_lip_sync",
+                "backend.logging_setup.configure_console_logging",
+                "backend.voice.tts.speak",
+                "backend.voice.audio_playback.play_wav",
+                "backend.character.vts.apply_expression",
+                "backend.character.vts.prepare_lip_sync",
             )
             try:
                 output, errors = io.StringIO(), io.StringIO()
@@ -36,8 +36,15 @@ class MainImportTests(unittest.TestCase):
                     )) for target in targets]
                     stack.enter_context(contextlib.redirect_stdout(output))
                     stack.enter_context(contextlib.redirect_stderr(errors))
+                    from backend.conversation import service as conversation
                     import main
+                    import backend.api.app
+                    import backend.__main__
+                    assert callable(conversation.create_session)
+                    assert callable(conversation.process_turn)
                     assert callable(main.run_cli)
+                    assert callable(backend.api.app.create_app)
+                    assert callable(backend.__main__.run_api)
                     for call in calls:
                         call.assert_not_called()
                     assert output.getvalue() == ""
@@ -54,4 +61,14 @@ class MainImportTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
+
+    def test_script_entry_point_starts_and_exits_with_original_prompts(self):
+        result = subprocess.run(
+            [sys.executable, "-B", "main.py"],
+            cwd=Path(__file__).resolve().parents[1],
+            input="\n종료\n", capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "초기 입력 버퍼 제거용. Enter를 눌러 시작: 너: 입력값: '종료'\n")
         self.assertEqual(result.stderr, "")

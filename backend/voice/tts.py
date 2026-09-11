@@ -16,8 +16,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
-LOGGER = logging.getLogger(__name__)
-PROJECT_ROOT = Path(__file__).resolve().parent
+LOGGER = logging.getLogger(__name__.rsplit(".", 1)[-1])
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_PATH = PROJECT_ROOT / "output.wav"
 _COSYVOICE_MODEL: Any = None
 

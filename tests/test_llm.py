@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-import llm
+from backend.conversation import llm
 
 
 class LlmTests(unittest.TestCase):
@@ -13,7 +13,7 @@ class LlmTests(unittest.TestCase):
     def test_chat_sends_schema_and_temperature_to_ollama(self):
         response = Mock()
         response.json.return_value = {"message": {"content": "{}"}}
-        with patch("llm.requests.post", return_value=response) as post:
+        with patch("backend.conversation.llm.requests.post", return_value=response) as post:
             llm.chat([], model="qwen2.5:14b", temperature=0.1, response_format={"type": "object"})
         payload = post.call_args.kwargs["json"]
         self.assertEqual(payload["format"], {"type": "object"})
@@ -23,6 +23,6 @@ class LlmTests(unittest.TestCase):
     def test_chat_accepts_a_request_specific_timeout(self):
         response = Mock()
         response.json.return_value = {"message": {"content": "ok"}}
-        with patch("llm.requests.post", return_value=response) as post:
+        with patch("backend.conversation.llm.requests.post", return_value=response) as post:
             llm.chat([], timeout=45)
         self.assertEqual(post.call_args.kwargs["timeout"], 45)

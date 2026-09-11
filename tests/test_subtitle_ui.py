@@ -1,6 +1,6 @@
 import unittest
 
-from subtitle_ui import format_korean_subtitle
+from backend.subtitle_ui import format_korean_subtitle
 
 
 class SubtitleUiTests(unittest.TestCase):

@@ -22,6 +22,7 @@ Character System을 결합하여
 
 현재 프로젝트는 개발 중이며,
 기능과 구조가 계속 변경될 수 있습니다.
+
 ---
 
 # 🚦 상태 표시
@@ -233,6 +234,35 @@ Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 
 CosyVoice 기본값이 남아 있으므로 위 명시 설정과 기존 `tts_config.json`을 사용합니다.
 Qwen 자막 폴백과 CosyVoice 음성 폴백은 별개입니다.
 
+## FastAPI 및 화면 미리보기 실행
+
+Python 파일을 역할별 `backend/` 패키지로 이동했지만 CLI와 API 실행 명령은
+유지합니다. 프로젝트 루트에서 기존 가상환경을 사용합니다.
+
+```bash
+# CLI
+.venv/bin/python -B main.py
+
+# 단일 세션 API — CLI와 동시에 실행하지 않습니다.
+.venv/bin/python -B -m backend
+```
+
+API 주소는 `http://127.0.0.1:8000`, 문서는 `/docs`입니다. 내부 ASGI 경로는
+`backend.api.app:app`이며 실행기는 프로젝트 루트를 작업 경로로 유지합니다.
+기존 Gemini 환경변수를 사용하고, 키 숨김 입력 실행법과 HTTP/WebSocket 명세는
+[backend/README.md](backend/README.md)를 참고합니다. API 생존 확인은 외부 모델 연결 검수를 대신하지 않습니다.
+
+VTS 단독 표정 검수 명령은 아래와 같습니다. 기존 기본 4초 동작을 유지합니다.
+
+```bash
+.venv/bin/python -B -m backend.character.vts
+```
+
+현재 React 화면은 모의 데이터만 사용합니다. VTS·SBV2·Ollama·API 서버 없이
+`frontend/`에서 `npm run dev`로 실행하고 `http://127.0.0.1:5173/`에 접속합니다.
+Node 조건·설치·검수 방법은 [frontend/README.md](frontend/README.md)를 참고합니다.
+개인 설정·토큰·WAV·모델의 경로는 이번 파일 이동에서 변경하지 않았습니다.
+
 ## 테스트 실행
 
 자동 테스트는 프로젝트 루트에서 실행합니다.
@@ -241,7 +271,7 @@ Qwen 자막 폴백과 CosyVoice 음성 폴백은 별개입니다.
 .venv/bin/python -B -m unittest discover -s tests -q
 ```
 
-기능별 검수 결과와 일반 실행의 남은 확인 사항은 `PROJECT_PLAN.md`에서 관리합니다.
+프론트엔드 자동 테스트는 `frontend/`에서 `npm test`로 실행합니다.
 
 ---
 
@@ -289,19 +319,59 @@ Qwen 자막 폴백과 CosyVoice 음성 폴백은 별개입니다.
 ```text
 AI_Waifu_System/
 ├── README.md
-├── main.py                 # 전체 대화·번역·감정·TTS 실행 흐름
-├── llm.py                  # Ollama 채팅 API 호출과 모델 설정
-├── translator.py           # 한국어↔일본어 번역 및 결과 검증
-├── japanese_response.py    # 일본어 AI 응답 검증 및 재생성
-├── tts.py                  # SBV2 주력 음성 합성 및 CosyVoice 2 선택형 연동
-├── audio_playback.py       # 운영체제별 WAV 음성 재생
-├── subtitle_ui.py          # 한국어 자막 출력 형식 관리
-├── emotion.py              # 감정 감지와 표정·음성 프리셋
-├── vts.py                  # VTube Studio 연결 및 표정 적용
-├── logging_setup.py        # 일반·디버그 로그 설정
-├── stt.py                  # 🟡 STT 구현 예정
-└── ai.py                   # 🔴 현재 사용하지 않는 이전 Ollama 호출 코드로 삭제 예정
+├── main.py                         # CLI 진입점
+├── backend/
+│   ├── __init__.py
+│   ├── __main__.py                 # python -m backend 진입점
+│   ├── logging_setup.py
+│   ├── subtitle_ui.py
+│   ├── api/
+│   │   ├── app.py                  # HTTP·WebSocket
+│   │   ├── runtime.py              # 단일 세션·작업 스레드
+│   │   └── schemas.py              # 공개 데이터 형식
+│   ├── conversation/
+│   │   ├── service.py              # CLI/API 공통 한 턴 처리
+│   │   ├── llm.py                  # Ollama 요청
+│   │   ├── japanese_response.py    # 일본어 응답 검증·재생성
+│   │   └── legacy_ai.py            # 미사용 이전 코드 보존
+│   ├── translation/
+│   │   ├── translator.py
+│   │   └── gemini_translator.py
+│   ├── voice/
+│   │   ├── tts.py
+│   │   ├── audio_playback.py
+│   │   └── stt.py                  # 구현 예정
+│   └── character/
+│       ├── emotion.py
+│       └── vts.py                  # 표정·립싱크
+├── scripts/
+│   └── download_elaina.py          # 별도 데이터 준비 도구
+├── tests/
+├── frontend/                       # React 화면 미리보기
+├── docs/
+├── requirements.txt
+└── requirements-api.txt
 ```
+
+### 이동된 주요 파일 경로
+
+| 이전 위치 | 현재 위치 |
+| --- | --- |
+| `conversation.py` | [backend/conversation/service.py](backend/conversation/service.py) |
+| `llm.py` | [backend/conversation/llm.py](backend/conversation/llm.py) |
+| `japanese_response.py` | [backend/conversation/japanese_response.py](backend/conversation/japanese_response.py) |
+| `translator.py` | [backend/translation/translator.py](backend/translation/translator.py) |
+| `gemini_translator.py` | [backend/translation/gemini_translator.py](backend/translation/gemini_translator.py) |
+| `tts.py`, `audio_playback.py` | [backend/voice/](backend/voice/) |
+| `vts.py`, `emotion.py` | [backend/character/](backend/character/) |
+| `backend/app.py`, `runtime.py`, `schemas.py` | [backend/api/](backend/api/) |
+| `download_elaina.py` | [scripts/download_elaina.py](scripts/download_elaina.py) |
+
+모듈 이동 후에도 `python main.py`와 `python -m backend`는 프로젝트 루트에서 실행합니다.
+
+각 Python 패키지에는 부작용 없는 `__init__.py`가 있습니다. 루트에 이전 모듈의
+호환용 복제 파일은 남기지 않았습니다. 자세한 역할은
+[docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)에 정리했습니다.
 
 실행 과정에서 생성되거나 개인 설정이 포함되는
 `output.wav`, `tts_config.json`, `vts_token.txt`, TTS 모델 파일 등은

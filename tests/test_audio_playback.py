@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from audio_playback import play_wav
+from backend.voice.audio_playback import play_wav
 
 
 class AudioPlaybackTests(unittest.TestCase):
@@ -14,7 +14,7 @@ class AudioPlaybackTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             wav = Path(directory) / "test.wav"
             wav.write_bytes(b"RIFFtest")
-            with patch("audio_playback.platform.system", return_value="Windows"):
+            with patch("backend.voice.audio_playback.platform.system", return_value="Windows"):
                 with patch.dict("sys.modules", {"winsound": _Winsound()}):
                     self.assertTrue(play_wav(wav))
 

@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
-import tts
+from backend.voice import tts
 
 
 class _Response:
@@ -29,8 +29,8 @@ class SBV2TtsTests(unittest.TestCase):
                 "emotion": {"happy": {"assist_text": "明るく話してください。"}},
             }
         }
-        with patch("tts.urlopen", return_value=_Response()) as urlopen_mock:
-            with patch("tts._write_wav_atomically", return_value=True):
+        with patch("backend.voice.tts.urlopen", return_value=_Response()) as urlopen_mock:
+            with patch("backend.voice.tts._write_wav_atomically", return_value=True):
                 self.assertTrue(tts._speak_sbv2("こんにちは", 1.25, "happy", config))
 
         request = urlopen_mock.call_args.args[0]

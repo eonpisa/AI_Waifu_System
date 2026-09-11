@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__.rsplit(".", 1)[-1])
 
 
 def play_wav(path: str | Path) -> bool:

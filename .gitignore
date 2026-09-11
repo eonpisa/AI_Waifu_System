@@ -24,3 +24,11 @@ SBV2-KR-master/Data/
 SBV2-KR-master/inputs/
 Style-Bert-VITS2/Data/
 Style-Bert-VITS2/inputs/
+
+# Local validation output and editor/OS scratch files
+/artifacts/
+.DS_Store
+/tempCodeRunnerFile.py
+
+# Local project management record; do not upload to GitHub.
+/PROJECT_PLAN.md
