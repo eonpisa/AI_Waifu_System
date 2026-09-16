@@ -3,6 +3,7 @@
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 
 from backend.conversation.service import TurnEvent, TurnResult
+from backend.service_status import public_service, public_subtitle_provider
 
 
 class TurnInput(BaseModel):
@@ -41,6 +42,10 @@ def error_code(value: object) -> str:
 
 
 def public_event(event: TurnEvent) -> dict | None:
+    if event.kind == "service_status":
+        return public_service(event.data)
+    if event.kind == "subtitle_provider":
+        return public_subtitle_provider(event.data)
     if event.kind == "stage_changed":
         stage = event.data.get("stage")
         return {"stage": stage} if isinstance(stage, str) and stage in STAGES else None

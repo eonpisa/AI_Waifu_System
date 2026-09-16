@@ -10,6 +10,7 @@ import wave
 from array import array
 from dataclasses import dataclass
 from backend.character.emotion import expression_presets
+from backend.service_status import report_service
 
 
 VTS_URI = "ws://127.0.0.1:8001"
@@ -223,11 +224,14 @@ async def _apply_expression(emotion, duration, stop_event, lip_sync=None):
         if not ok:
             raise _VTSFailure("authentication_failed")
 
+        status_code = "parameters_applied"
         if lip_sync is not None and not await _supports_lip_sync(ws):
+            status_code = "model_not_calibrated"
             LOGGER.warning("VTS lip sync skipped: model_not_calibrated")
             lip_sync = None
         start = time.monotonic()
         mouth_sent = False
+        reported = False
         try:
             while duration is None or time.monotonic() - start < duration:
                 if stop_event is not None and stop_event.is_set():
@@ -239,6 +243,9 @@ async def _apply_expression(emotion, duration, stop_event, lip_sync=None):
                     values.append({"id": MOUTH_INPUT, "value": mouth / MOUTH_OUTPUT_GAIN})
                     mouth_sent = True
                 await _inject_parameters(ws, values)
+                if not reported:
+                    report_service("vts", status_code)
+                    reported = True
                 interval = LIP_FRAME_SECONDS if lip_sync is not None else 0.1
                 # Use playback time, not message count: slow replies skip old frames.
                 await asyncio.sleep(max(0, interval - (time.monotonic() - tick)))
@@ -250,13 +257,16 @@ async def _apply_expression(emotion, duration, stop_event, lip_sync=None):
                     ), timeout=MOUTH_RESET_TIMEOUT)
                 except Exception:
                     LOGGER.warning("VTS lip sync: mouth_reset_failed")
+                    report_service("vts", "mouth_reset_failed")
 
         print(f"표정 적용 완료: {emotion}")
 
 
 async def apply_expression(emotion, duration=4.0, stop_event=None, lip_sync=None):
     """Apply for four seconds by default; None requires a playback stop event."""
+    report_service("vts", "not_checked")
     if duration is None and stop_event is None:
+        report_service("vts", "stop_event_required")
         LOGGER.warning("VTS skipped: stop_event_required")
         return
     if stop_event is not None and stop_event.is_set():
@@ -276,12 +286,16 @@ async def apply_expression(emotion, duration=4.0, stop_event=None, lip_sync=None
             raise
     except _VTSFailure as exc:
         LOGGER.warning("VTS skipped: %s", str(exc))
+        report_service("vts", str(exc))
     except asyncio.TimeoutError:
         LOGGER.warning("VTS skipped: timeout")
+        report_service("vts", "timeout")
     except (OSError, websockets.exceptions.WebSocketException):
         LOGGER.warning("VTS skipped: connection_failed")
+        report_service("vts", "connection_failed")
     except Exception:
         LOGGER.warning("VTS skipped: response_error")
+        report_service("vts", "response_error")
     finally:
         if not task.done():
             task.cancel()

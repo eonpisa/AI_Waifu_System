@@ -14,6 +14,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from backend.service_status import report_service
 
 
 LOGGER = logging.getLogger(__name__.rsplit(".", 1)[-1])
@@ -219,8 +220,10 @@ def speak(text_to_speak: str, speed: float, emotion: str, expression_duration: f
     ).lower()
     if backend == "sbv2":
         if _speak_sbv2(text_to_speak, speed, emotion, config):
+            report_service("sbv2", "synthesis_succeeded")
             LOGGER.info("SBV2 synthesis completed: %s", OUTPUT_PATH)
             return True
+        report_service("sbv2", "synthesis_failed")
         fallback = os.environ.get(
             "TTS_FALLBACK_TO_COSYVOICE", config.get("fallback_to_cosyvoice", False)
         )

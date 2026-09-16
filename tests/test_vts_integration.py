@@ -442,6 +442,63 @@ class MainVTSIntegrationTests(unittest.TestCase):
                 self.assertTrue(all(not w.is_alive() for w in workers))
 
 
+class PlaybackLipSyncCalibrationTests(unittest.TestCase):
+    def test_mac_envelope_keeps_tail_active_at_calibrated_playback_time(self):
+        from backend.conversation import service
+
+        lip = vts.WavLipSync((0.0, 0.5, 0.8, 0.4), 0.5, 2.0)
+        worker = Mock()
+
+        def play(path):
+            self.assertEqual(path, "output.wav")
+            self.assertAlmostEqual(lip.started_at, 100.7)
+            self.assertEqual(lip.mouth_value(100.6), 0.0)
+            self.assertEqual(lip.mouth_value(100.9), 0.0)  # WAV's own silence remains.
+            self.assertEqual(lip.mouth_value(101.3), 0.5)
+            self.assertEqual(lip.mouth_value(102.3), 0.4)  # Previously past duration.
+            self.assertEqual(lip.mouth_value(102.8), 0.0)
+            return True
+
+        with patch.object(service.platform, "system", return_value="Darwin"), \
+                patch.object(service.time, "monotonic", return_value=100.0), \
+                patch.object(vts, "prepare_lip_sync", return_value=lip), \
+                patch.object(service.threading, "Thread", return_value=worker) as thread, \
+                patch.object(service.audio_playback, "play_wav", side_effect=play):
+            self.assertTrue(service.play_with_expression("normal"))
+        worker.start.assert_called_once()
+        worker.join.assert_called_once()
+        self.assertTrue(thread.call_args.kwargs["kwargs"]["stop_event"].is_set())
+        self.assertIsNone(thread.call_args.kwargs["kwargs"]["duration"])
+
+    def test_other_platform_clocks_are_unchanged_and_mac_failures_still_stop(self):
+        from backend.conversation import service
+
+        for system, outcome in [("Windows", True), ("Linux", True), ("Darwin", False),
+                                ("Darwin", RuntimeError("playback failed")), ("Darwin", KeyboardInterrupt())]:
+            with self.subTest(system=system, outcome=type(outcome).__name__):
+                lip = vts.WavLipSync((0.5,), 0.04, 0.04)
+                worker = Mock()
+
+                def play(path):
+                    self.assertAlmostEqual(lip.started_at, 100.7 if system == "Darwin" else 100.0)
+                    if isinstance(outcome, BaseException):
+                        raise outcome
+                    return outcome
+
+                with patch.object(service.platform, "system", return_value=system), \
+                        patch.object(service.time, "monotonic", return_value=100.0), \
+                        patch.object(vts, "prepare_lip_sync", return_value=lip), \
+                        patch.object(service.threading, "Thread", return_value=worker) as thread, \
+                        patch.object(service.audio_playback, "play_wav", side_effect=play):
+                    if isinstance(outcome, BaseException):
+                        with self.assertRaises(type(outcome)):
+                            service.play_with_expression("normal")
+                    else:
+                        self.assertEqual(service.play_with_expression("normal"), outcome)
+                worker.join.assert_called_once()
+                self.assertTrue(thread.call_args.kwargs["kwargs"]["stop_event"].is_set())
+
+
 class WavLipSyncTests(unittest.TestCase):
     def analyse(self, samples, channels=1, rate=1000, width=2):
         with tempfile.TemporaryDirectory() as directory:

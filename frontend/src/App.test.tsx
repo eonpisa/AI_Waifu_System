@@ -18,7 +18,7 @@ describe('single-session screen preview', () => {
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
   it('clearly identifies mock mode and never reports a service as connected', () => {
-    render(<App />)
+    render(<App preview />)
     expect(screen.getByText('화면 미리보기')).toBeVisible()
     expect(screen.getAllByText('미연결')).toHaveLength(4)
     expect(screen.getByRole('button', { name: '음성 입력 — 준비 중' })).toBeDisabled()
@@ -27,7 +27,7 @@ describe('single-session screen preview', () => {
   })
 
   it('fills a suggestion without automatically sending it', () => {
-    render(<App />)
+    render(<App preview />)
     fireEvent.click(screen.getByRole('button', { name: /오늘 있었던 일/ }))
     expect(screen.getByRole('textbox')).toHaveValue('오늘 학교에서 시험을 봤어.')
     expect(screen.getByRole('textbox')).toHaveFocus()
@@ -35,7 +35,7 @@ describe('single-session screen preview', () => {
   })
 
   it('rejects whitespace and a forged over-limit submission', () => {
-    render(<App />)
+    render(<App preview />)
     send('   \n ')
     expect(screen.getByRole('log')).toBeEmptyDOMElement()
     send('가'.repeat(2001))
@@ -44,7 +44,7 @@ describe('single-session screen preview', () => {
   })
 
   it('walks through every stage, shows subtitles, and returns focus to input', () => {
-    render(<App />)
+    render(<App preview />)
     send()
     expect(screen.getByRole('status')).toHaveTextContent('입력 번역 중')
     expect(screen.getByRole('textbox')).toBeDisabled()
@@ -67,7 +67,7 @@ describe('single-session screen preview', () => {
   })
 
   it('rejects a second form submission while a turn is running', () => {
-    render(<App />)
+    render(<App preview />)
     const textarea = screen.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: '첫 발화' } })
     const form = textarea.closest('form')!
@@ -77,7 +77,7 @@ describe('single-session screen preview', () => {
   })
 
   it('does not send Enter during Korean composition, then sends completed text once', () => {
-    render(<App />)
+    render(<App preview />)
     const textarea = screen.getByRole('textbox')
     fireEvent.compositionStart(textarea)
     fireEvent.change(textarea, { target: { value: '안녕' } })
@@ -91,7 +91,7 @@ describe('single-session screen preview', () => {
   })
 
   it('honors native isComposing and keyCode 229 guards', () => {
-    render(<App />)
+    render(<App preview />)
     const textarea = screen.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: '한글' } })
     fireEvent.keyDown(textarea, { key: 'Enter', isComposing: true })
@@ -102,14 +102,14 @@ describe('single-session screen preview', () => {
   it('Shift+Enter inserts a newline without sending', async () => {
     vi.useRealTimers()
     const user = userEvent.setup()
-    render(<App />)
+    render(<App preview />)
     await user.type(screen.getByRole('textbox'), '첫 줄{Shift>}{Enter}{/Shift}둘째 줄')
     expect(screen.getByRole('textbox')).toHaveValue('첫 줄\n둘째 줄')
     expect(screen.getByRole('log')).toBeEmptyDOMElement()
   })
 
   it('keeps the subtitle after synthesis failure and accepts the next turn', () => {
-    render(<App />)
+    render(<App preview />)
     choose('tts_error')
     send()
     advance()
@@ -124,7 +124,7 @@ describe('single-session screen preview', () => {
   })
 
   it('allows the simulated speaking phase despite a VTS error', () => {
-    render(<App />)
+    render(<App preview />)
     choose('vts_error')
     send()
     advance(2600)
@@ -137,7 +137,7 @@ describe('single-session screen preview', () => {
   })
 
   it('ends only after the current mock turn finishes and preserves its history', () => {
-    render(<App />)
+    render(<App preview />)
     send()
     fireEvent.click(screen.getByRole('button', { name: '대화 종료' }))
     expect(screen.getByText('진행 중인 예시 답변이 끝나면 대화를 종료해요.')).toBeVisible()
@@ -152,7 +152,7 @@ describe('single-session screen preview', () => {
   })
 
   it('ends an idle session without starting any mock tasks', () => {
-    render(<App />)
+    render(<App preview />)
     fireEvent.click(screen.getByRole('button', { name: '대화 종료' }))
     expect(screen.getByRole('status')).toHaveTextContent('대화 종료')
     expect(screen.getByRole('textbox')).toBeDisabled()
@@ -160,7 +160,7 @@ describe('single-session screen preview', () => {
   })
 
   it('clears all pending mock events on unmount', () => {
-    const view = render(<App />)
+    const view = render(<App preview />)
     send()
     expect(vi.getTimerCount()).toBeGreaterThan(0)
     view.unmount()
@@ -174,7 +174,7 @@ describe('single-session screen preview', () => {
     const storage = vi.spyOn(Storage.prototype, 'setItem')
     vi.stubGlobal('fetch', network)
     vi.stubGlobal('WebSocket', socket)
-    render(<App />)
+    render(<App preview />)
     const text = '<img src="x" onerror="alert(1)">'
     send(text)
     advance()

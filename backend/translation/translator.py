@@ -17,6 +17,7 @@ from backend.translation.gemini_translator import (
     translate_japanese_to_korean as gemini_japanese_to_korean,
 )
 from backend.conversation.llm import chat
+from backend.service_status import report_service, report_subtitle_provider
 
 
 LOGGER = logging.getLogger(__name__.rsplit(".", 1)[-1])
@@ -242,6 +243,7 @@ def _log_subtitle_provider(provider: str, model: str, fallback_reason: str) -> N
         model,
         fallback_reason,
     )
+    report_subtitle_provider(provider, model, fallback_reason)
 
 
 def _translate_json(
@@ -466,7 +468,9 @@ def japanese_to_korean(text: str) -> Optional[str]:
     if attempt.translation and reason is None:
         reason = _korean_translation_validation_reason(source, attempt.translation)
     if attempt.translation and reason is None:
+        report_service("gemini", "subtitle_accepted")
         _log_subtitle_provider("gemini", GEMINI_TRANSLATOR_MODEL, "none")
         return attempt.translation
 
+    report_service("gemini", "api_key_missing" if reason == "gemini_api_key_missing" else "translation_failed")
     return _translate_with_retry(source, "ja_to_ko", fallback_reason=_reason_code(reason))

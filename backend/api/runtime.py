@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 
 from backend.conversation.service import TurnEvent, TurnResult, create_session, process_turn
+from backend.service_status import SERVICE_CODES, observe_services
 from .schemas import public_event, public_result
 
 
@@ -27,12 +28,17 @@ class Runtime:
         self.seq = 0
         self.started_at = None
         self.last_result = None
+        self.services = {name: {"state": "unknown", "code": "not_checked", "turn_id": None}
+                         for name in SERVICE_CODES}
+        self.subtitle_provider = None
         self.subscribers = set()
 
     def state(self) -> dict:
         return {"busy": self.busy, "accepting": self.accepting, "stage": self.stage,
                 "turn_id": self.turn_id or None, "seq": self.seq,
-                "last_result": self.last_result}
+                "last_result": self.last_result,
+                "services": {name: dict(value) for name, value in self.services.items()},
+                "subtitle_provider": self.subtitle_provider}
 
     def envelope(self, kind, data) -> dict:
         elapsed = 0 if self.started_at is None else round((time.monotonic() - self.started_at) * 1000)
@@ -78,6 +84,7 @@ class Runtime:
         self.started_at = time.monotonic()
         self.stage = "queued"
         self.last_result = None
+        self.subtitle_provider = None
         self.publish("stage_changed", {"stage": self.stage})
         self.task = asyncio.create_task(self.run(text))
         return self.turn_id
@@ -88,14 +95,21 @@ class Runtime:
             return
         if event.kind == "stage_changed":
             self.stage = data["stage"]
+        elif event.kind == "service_status":
+            self.services[data["service"]] = {
+                "state": data["state"], "code": data["code"], "turn_id": self.turn_id}
+        elif event.kind == "subtitle_provider":
+            self.subtitle_provider = {**data, "turn_id": self.turn_id}
         self.publish(event.kind, data)
 
     async def run(self, text):
         original = [dict(message) for message in self.session.messages]
 
         def work():
-            return self.processor(self.session, text, emit=lambda event:
-                                  self.loop.call_soon_threadsafe(self.on_event, event))
+            def emit(event):
+                self.loop.call_soon_threadsafe(self.on_event, event)
+            with observe_services(lambda kind, data: emit(TurnEvent(kind, data))):
+                return self.processor(self.session, text, emit=emit)
 
         try:
             result = await self.loop.run_in_executor(self.executor, work)

@@ -1,8 +1,10 @@
 """Single-session conversation flow shared by the CLI and future API."""
 
 import asyncio
+from contextvars import copy_context
 from dataclasses import dataclass
 import logging
+import platform
 import threading
 import time
 from typing import Callable, Literal
@@ -13,6 +15,12 @@ from backend.translation import translator
 from backend.voice import tts
 from backend.character import vts
 from backend.character.emotion import detect_emotion, clean_for_tts, limit_text, apply_emotion_to_tts
+from backend.service_status import report_service
+
+
+# Listening/visual calibration with afplay and this Mac's built-in speakers.
+# This is not a measured hardware latency; recheck if the output device changes.
+MACOS_LIP_SYNC_DELAY_SECONDS = 0.7
 
 
 _INITIAL_MESSAGES = [
@@ -112,13 +120,16 @@ def run_expression(emotion, duration=4.0, stop_event=None, lip_sync=None):
     except Exception:
         # Never expose transport errors, credentials or a worker traceback.
         logging.getLogger("vts").warning("VTS skipped: worker_error")
+        report_service("vts", "worker_error")
 
 
 def play_with_expression(emotion):
     lip_sync = vts.prepare_lip_sync("output.wav")
     stop_event = threading.Event()
     worker = threading.Thread(
-        target=run_expression,
+        # Carry the API's observation callback into the one existing worker.
+        target=copy_context().run,
+        args=(run_expression,),
         kwargs={"emotion": emotion, "duration": None, "stop_event": stop_event,
                 "lip_sync": lip_sync},
         name="vts-expression",
@@ -131,9 +142,12 @@ def play_with_expression(emotion):
             started = True
         except RuntimeError:
             logging.getLogger("vts").warning("VTS skipped: worker_start_failed")
+            report_service("vts", "worker_start_failed")
         if lip_sync is not None:
-            # afplay is blocking; this marks its launch, not a hardware callback.
-            lip_sync.started_at = time.monotonic()
+            # Delay the envelope, not playback or the expression worker. A
+            # future start keeps the mouth closed until its first audio frame.
+            delay = MACOS_LIP_SYNC_DELAY_SECONDS if platform.system() == "Darwin" else 0.0
+            lip_sync.started_at = time.monotonic() + delay
         return audio_playback.play_wav("output.wav")
     finally:
         stop_event.set()

@@ -1,5 +1,5 @@
 // Stage 3: deterministic screen preview. No HTTP, WebSocket, audio or storage.
-export type Stage = 'idle' | 'translating_input' | 'generating' | 'translating_subtitle' | 'synthesizing' | 'speaking' | 'ended'
+export type Stage = 'idle' | 'queued' | 'translating_input' | 'generating' | 'translating_subtitle' | 'synthesizing' | 'speaking' | 'ended'
 export type Scenario = 'normal' | 'tts_error' | 'vts_error'
 export type MockEvent =
   | { type: 'stage'; stage: Stage }
@@ -9,7 +9,7 @@ export type MockEvent =
   | { type: 'finished' }
 
 export const stageLabels: Record<Stage, string> = {
-  idle: '입력 대기', translating_input: '입력 번역 중', generating: '응답 생성 중',
+  idle: '입력 대기', queued: '요청 접수 중', translating_input: '입력 번역 중', generating: '응답 생성 중',
   translating_subtitle: '자막 번역 중', synthesizing: '음성 합성 중',
   speaking: '말하는 중', ended: '대화 종료',
 }

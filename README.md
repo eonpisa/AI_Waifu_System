@@ -258,8 +258,9 @@ VTS 단독 표정 검수 명령은 아래와 같습니다. 기존 기본 4초 �
 .venv/bin/python -B -m backend.character.vts
 ```
 
-현재 React 화면은 모의 데이터만 사용합니다. VTS·SBV2·Ollama·API 서버 없이
+React 화면은 기본적으로 로컬 API에 연결합니다. 위 안내대로 서비스와 API를 실행한 뒤
 `frontend/`에서 `npm run dev`로 실행하고 `http://127.0.0.1:5173/`에 접속합니다.
+서비스 없이 화면만 보려면 `http://127.0.0.1:5173/?preview=1`을 사용합니다.
 Node 조건·설치·검수 방법은 [frontend/README.md](frontend/README.md)를 참고합니다.
 개인 설정·토큰·WAV·모델의 경로는 이번 파일 이동에서 변경하지 않았습니다.
 
@@ -347,7 +348,7 @@ AI_Waifu_System/
 ├── scripts/
 │   └── download_elaina.py          # 별도 데이터 준비 도구
 ├── tests/
-├── frontend/                       # React 화면 미리보기
+├── frontend/                       # React 대화 화면·독립 미리보기
 ├── docs/
 ├── requirements.txt
 └── requirements-api.txt

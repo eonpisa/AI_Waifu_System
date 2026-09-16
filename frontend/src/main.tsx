@@ -3,4 +3,4 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './styles.css'
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>)
+createRoot(document.getElementById('root')!).render(<StrictMode><App preview={new URLSearchParams(window.location.search).get('preview') === '1'} /></StrictMode>)

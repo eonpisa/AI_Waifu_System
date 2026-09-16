@@ -1,5 +1,6 @@
 import os
 import requests
+from backend.service_status import report_service
 
 DEFAULT_OLLAMA_API_URL = "http://127.0.0.1:11434/api/chat"
 
@@ -39,9 +40,14 @@ def chat(messages, model=None, temperature=None, response_format=None, timeout=N
     if response_format is not None:
         data["format"] = response_format
 
-    response = requests.post(
-        OLLAMA_HOST, json=data, timeout=OLLAMA_TIMEOUT_SECONDS if timeout is None else timeout
-    )
-    response.raise_for_status()
-
-    return response.json()["message"]["content"]
+    try:
+        response = requests.post(
+            OLLAMA_HOST, json=data, timeout=OLLAMA_TIMEOUT_SECONDS if timeout is None else timeout
+        )
+        response.raise_for_status()
+        content = response.json()["message"]["content"]
+    except Exception:
+        report_service("ollama", "request_failed")
+        raise
+    report_service("ollama", "response_received")
+    return content
