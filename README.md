@@ -157,17 +157,12 @@ Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 
 
 ## macOS 실행 방법
 
-이 절차는 기존 개인 실행 환경 기준입니다. SBV2 소스·학습 모델·개인
-`tts_config.json`은 이 저장소에 포함하지 않습니다. 새 clone만으로 바로 실행되는
-배포 패키지는 아닙니다. 아래 경로는 사용자 환경에 맞게 조정합니다.
+아래 명령은 프로젝트 루트에서 시작합니다. Python 3.11과 기존 `.venv`를 사용하며,
+SBV2 소스·학습 모델·개인 `tts_config.json`은 별도로 준비해야 합니다.
+이 저장소는 새 clone만으로 바로 실행되는 배포 패키지는 아닙니다.
 
-기존 SBV2의 `style_bert_vits2/nlp/bert_models.py`에서 transformers 4.51.3과
-호환되도록 두 `from_pretrained()` 호출의 `dtype="float32"`를
-`torch_dtype="float32"`로 수정한 환경을 검수했습니다. fp32 지정 의도는 유지하며,
-원격에서 제거된 SBV2 소스 전체는 다시 포함하지 않습니다.
-
-프로젝트 Python은 `/Users/eonpisa_1017/Desktop/AI_Waifu_System/.venv/bin/python`
-(확인 버전 3.11.0)입니다. 서버와 앱 모두 이 환경을 사용합니다.
+SBV2에서 transformers 4.51.3을 사용한다면 BERT 로딩의 fp32 지정은
+`torch_dtype="float32"`를 사용합니다. 서버 의존성은 SBV2 환경에서 별도로 관리합니다.
 
 | 항목 | 실행 기준·설정 출처 |
 | --- | --- |
@@ -184,12 +179,11 @@ Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 
 2. SBV2용 터미널에서 실행합니다. 이미 5001 서버가 정상 실행 중이면 그대로 사용합니다.
 
    ```bash
-   cd /Users/eonpisa_1017/Desktop/AI_Waifu_System/SBV2-KR-master
+   cd SBV2-KR-master
    ../.venv/bin/python -B server_fastapi.py
    ```
 
    `--port` 옵션은 지원하지 않습니다. 포트는 `config.yml`에서 읽습니다.
-   현재 서버 코드는 CUDA가 없으면 CPU를 선택하므로 이 Mac에서는 CPU 경로입니다.
    브라우저의 `http://127.0.0.1:5001/docs` 또는 아래 명령으로 확인합니다.
 
    ```bash
@@ -197,13 +191,14 @@ Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 
    ```
 
    통과 기준은 HTTP 200입니다. 문서 응답만으로 합성 성공을 판정하지 않습니다.
-3. 앱용 zsh 터미널에서 다음 블록을 실행하고 키를 숨김 입력합니다.
+3. VTube Studio에서 모델을 불러오고 Plugin API(8001)를 활성화합니다.
+   최초 연결 시 AI Waifu 플러그인 인증을 허용합니다.
+4. 프로젝트 루트의 앱용 zsh 터미널에서 다음 블록을 실행하고 키를 숨김 입력합니다.
    괄호 안의 별도 셸에서만 키·실행 설정을 유지하며, 앱 종료 후 부모 셸에 키를 남기지 않습니다.
 
    ```zsh
    (
      set +x
-     cd /Users/eonpisa_1017/Desktop/AI_Waifu_System || exit 1
      source .venv/bin/activate
      export OLLAMA_API_URL='http://127.0.0.1:11434/api/chat'
      export OLLAMA_CHAT_MODEL='qwen3.5:9b'
@@ -234,23 +229,18 @@ Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 
 CosyVoice 기본값이 남아 있으므로 위 명시 설정과 기존 `tts_config.json`을 사용합니다.
 Qwen 자막 폴백과 CosyVoice 음성 폴백은 별개입니다.
 
-## FastAPI 및 화면 미리보기 실행
+## FastAPI 및 프론트엔드 실행
 
-Python 파일을 역할별 `backend/` 패키지로 이동했지만 CLI와 API 실행 명령은
-유지합니다. 프로젝트 루트에서 기존 가상환경을 사용합니다.
+CLI 대신 웹 화면을 사용할 때는 프로젝트 루트에서 API를 실행합니다.
+CLI와 API는 동시에 실행하지 않습니다. Gemini 키는 실행할 터미널에서 설정해야 합니다.
 
 ```bash
-# CLI
-.venv/bin/python -B main.py
-
-# 단일 세션 API — CLI와 동시에 실행하지 않습니다.
 .venv/bin/python -B -m backend
 ```
 
-API 주소는 `http://127.0.0.1:8000`, 문서는 `/docs`입니다. 내부 ASGI 경로는
-`backend.api.app:app`이며 실행기는 프로젝트 루트를 작업 경로로 유지합니다.
-기존 Gemini 환경변수를 사용하고, 키 숨김 입력 실행법과 HTTP/WebSocket 명세는
-[backend/README.md](backend/README.md)를 참고합니다. API 생존 확인은 외부 모델 연결 검수를 대신하지 않습니다.
+API 주소는 `http://127.0.0.1:8000`, API 문서는 `/docs`입니다.
+키 숨김 입력을 포함한 실행 안내는 [backend/README.md](backend/README.md),
+요청·응답과 WebSocket 명세는 [docs/backend-api.md](docs/backend-api.md)를 참고합니다.
 
 VTS 단독 표정 검수 명령은 아래와 같습니다. 기존 기본 4초 동작을 유지합니다.
 
@@ -262,7 +252,6 @@ React 화면은 기본적으로 로컬 API에 연결합니다. 위 안내대로 
 `frontend/`에서 `npm run dev`로 실행하고 `http://127.0.0.1:5173/`에 접속합니다.
 서비스 없이 화면만 보려면 `http://127.0.0.1:5173/?preview=1`을 사용합니다.
 Node 조건·설치·검수 방법은 [frontend/README.md](frontend/README.md)를 참고합니다.
-개인 설정·토큰·WAV·모델의 경로는 이번 파일 이동에서 변경하지 않았습니다.
 
 ## 테스트 실행
 
@@ -326,6 +315,7 @@ AI_Waifu_System/
 │   ├── __main__.py                 # python -m backend 진입점
 │   ├── logging_setup.py
 │   ├── subtitle_ui.py
+│   ├── service_status.py           # 서비스 결과·번역기 정보
 │   ├── api/
 │   │   ├── app.py                  # HTTP·WebSocket
 │   │   ├── runtime.py              # 단일 세션·작업 스레드
@@ -333,8 +323,7 @@ AI_Waifu_System/
 │   ├── conversation/
 │   │   ├── service.py              # CLI/API 공통 한 턴 처리
 │   │   ├── llm.py                  # Ollama 요청
-│   │   ├── japanese_response.py    # 일본어 응답 검증·재생성
-│   │   └── legacy_ai.py            # 미사용 이전 코드 보존
+│   │   └── japanese_response.py    # 일본어 응답 검증·재생성
 │   ├── translation/
 │   │   ├── translator.py
 │   │   └── gemini_translator.py
@@ -345,8 +334,6 @@ AI_Waifu_System/
 │   └── character/
 │       ├── emotion.py
 │       └── vts.py                  # 표정·립싱크
-├── scripts/
-│   └── download_elaina.py          # 별도 데이터 준비 도구
 ├── tests/
 ├── frontend/                       # React 대화 화면·독립 미리보기
 ├── docs/
@@ -366,7 +353,6 @@ AI_Waifu_System/
 | `tts.py`, `audio_playback.py` | [backend/voice/](backend/voice/) |
 | `vts.py`, `emotion.py` | [backend/character/](backend/character/) |
 | `backend/app.py`, `runtime.py`, `schemas.py` | [backend/api/](backend/api/) |
-| `download_elaina.py` | [scripts/download_elaina.py](scripts/download_elaina.py) |
 
 모듈 이동 후에도 `python main.py`와 `python -m backend`는 프로젝트 루트에서 실행합니다.
 
