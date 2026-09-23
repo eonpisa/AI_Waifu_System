@@ -24,6 +24,7 @@ CLI와 API는 같은 Python 대화 로직을 사용합니다.
 | `GET /api/state` | 현재 처리 상태와 최근 결과 조회 |
 | `POST /api/turn` | 한국어 메시지 전송 |
 | `POST /api/end` | 진행 중인 턴이 끝난 뒤 대화 종료 |
+| `POST /api/transcribe` | 녹음 파일을 한국어 초안으로 전사 (선택형 STT) |
 | `WS /api/events` | 진행 상태·응답·자막·서비스 결과 수신 |
 
 ## 주의사항
@@ -34,6 +35,8 @@ CLI와 API는 같은 Python 대화 로직을 사용합니다.
 - 키·토큰·개인 설정은 프론트엔드나 Git에 넣지 않습니다.
 - `/api/health` 성공과 최근 서비스 결과는 현재 모든 외부 서비스의 정상 동작을 보장하지 않습니다.
 - Python 코드 변경 후에는 API를 재시작합니다.
+- STT는 선택형 `requirements-stt.txt`와 로컬 모델 경로 `AI_WAIFU_STT_MODEL`을 사용합니다.
+  모델 자동 다운로드는 없으며, 상세 설정은 [STT 안내](../docs/backend-api.md#선택형-음성-입력)를 참고하세요.
 
 요청·응답 형식, WebSocket 이벤트, 오류·종료 처리, 내부 구현과 검증 방법은
 [백엔드 API 상세 문서](../docs/backend-api.md)에 보존되어 있습니다.

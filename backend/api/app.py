@@ -2,6 +2,8 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
@@ -10,6 +12,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from backend.conversation.service import process_turn
+from backend.voice.stt import MAX_AUDIO_BYTES, transcribe_file
 from .runtime import Runtime, TurnRejected
 from .schemas import TurnInput
 
@@ -36,7 +39,7 @@ class LocalOriginMiddleware:
         await self.app(scope, receive, send)
 
 
-def create_app(processor=process_turn) -> FastAPI:
+def create_app(processor=process_turn, transcriber=transcribe_file) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         app.state.runtime = Runtime(processor)
@@ -79,6 +82,51 @@ def create_app(processor=process_turn) -> FastAPI:
     @app.post("/api/end")
     async def end(request: Request):
         return request.app.state.runtime.end()
+
+    @app.post("/api/transcribe")
+    async def transcribe(request: Request):
+        mime = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        suffixes = {"audio/webm": ".webm", "audio/mp4": ".mp4",
+                    "audio/ogg": ".ogg", "audio/wav": ".wav"}
+        if mime not in suffixes:
+            return JSONResponse({"error": "unsupported_audio"}, status_code=415)
+        runtime = request.app.state.runtime
+
+        async def work():
+            try:
+                data = bytearray()
+                async with asyncio.timeout(15):
+                    async for chunk in request.stream():
+                        if len(data) + len(chunk) > MAX_AUDIO_BYTES:
+                            return JSONResponse({"error": "audio_too_large"}, status_code=413)
+                        data.extend(chunk)
+                if not data:
+                    return JSONResponse({"error": "audio_missing"}, status_code=422)
+
+                def recognize():
+                    # The worker owns the file until inference finishes, even
+                    # when the HTTP client disconnects. Never log its path.
+                    with TemporaryDirectory(prefix="ai-waifu-stt-") as folder:
+                        audio = Path(folder) / ("recording" + suffixes[mime])
+                        audio.write_bytes(data)
+                        return transcriber(audio)
+
+                result = await runtime.loop.run_in_executor(runtime.executor, recognize)
+                allowed_errors = {"audio_missing", "audio_too_large", "audio_too_long",
+                                  "model_not_configured", "model_missing", "dependency_missing",
+                                  "transcription_failed", "no_speech"}
+                if result.error:
+                    code = result.error if result.error in allowed_errors else "transcription_failed"
+                    return JSONResponse({"error": code}, status_code=422)
+                if not isinstance(result.text, str) or not 1 <= len(result.text.strip()) <= 2000:
+                    return JSONResponse({"error": "transcription_failed"}, status_code=422)
+                return JSONResponse({"text": result.text.strip()}, headers={"Cache-Control": "no-store"})
+            except Exception:
+                return JSONResponse({"error": "transcription_failed"}, status_code=422)
+
+        # Shield keeps the reservation and temporary-file ownership until the
+        # blocking worker finishes; disconnect does not permit overlapping work.
+        return await asyncio.shield(runtime.start_transcription(work))
 
     @app.websocket("/api/events")
     async def events(websocket: WebSocket):

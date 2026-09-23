@@ -45,7 +45,11 @@ Character System을 결합하여
 * 🟢 현재 실행 중인 대화의 단기 기록 관리
 * 🟢 감정 분석 시스템
 * 🟡 일본어 → 한국어 자막 번역 품질 개선
-* 🟡 STT 음성 입력
+* 🟢 웹 화면의 한국어 STT 음성 입력
+
+  * 버튼으로 녹음하고 전사문을 확인·수정한 뒤 직접 전송
+  * Mac에서 대화·Gemini 자막·SBV2 음성·VTS 입 움직임·다음 입력 복귀 확인
+  * 로컬 음성 인식 모델은 별도 준비; Windows 마이크 실환경 검수는 아직 진행 전
 * 🟡 대화 내용 저장
 * 🟡 RAG 기반 장기 기억 시스템
 
@@ -61,7 +65,7 @@ Character System을 결합하여
   * 연동 기능은 구현되어 있음
   * 현재는 주력으로 사용하지 않고 보류
   * 필요할 경우 선택형 TTS 방식으로 다시 사용 가능
-* 🟢 Windows, macOS, Linux 환경별 WAV 음성 재생
+* 🟢 운영체제별 WAV 재생 코드 (Mac에서 실제 청취 확인, Windows·Linux 실환경 검수 전)
 * 🟢 TTS 실패 시 프로그램이 종료되지 않도록 예외 처리
 
 ## 캐릭터 시스템 (Character System)
@@ -70,7 +74,8 @@ Character System을 결합하여
 * 🟢 VTube Studio 연동
 
   * API 연결과 표정 적용 코드는 구현되어 있음
-  * 메인 실행 흐름 연결 및 안정화 작업 예정
+  * 메인 대화의 감정 표정과 WAV 음량 기반 입 움직임에 연결됨
+  * Mac에서 음성·입 움직임 동작 확인; 시작 직후 짧은 멈춤은 원인 확인 전
 * 🟡 캐릭터 행동 시스템
 * 🟡 표정 및 모션 개선
 * 🟡 Live2D 캐릭터 연동 개선
@@ -86,7 +91,7 @@ Character System을 결합하여
 
 ```text
 사용자 입력
-(현재 키보드 입력 / STT 구현 예정)
+(한국어 키보드 / 웹 마이크 → 로컬 STT → 전사문 확인)
 
 ↓
 
@@ -123,13 +128,15 @@ WAV 음성 재생
 ↓
 
 VTube Studio 캐릭터 표현
-(연동 개선 중)
+(감정 표정·WAV 기반 입 움직임)
 ```
 
 ### 동작 과정 (Process)
 
-현재는 사용자가 한국어로 입력하면
-입력 내용을 확인하고 일본어로 번역합니다.
+사용자가 키보드로 한국어를 입력하거나 웹 화면에서 마이크로 녹음합니다.
+녹음한 음성은 로컬 모델이 한국어로 전사하고, 사용자가 입력창에서
+확인·수정한 뒤 직접 전송합니다. 전송된 한국어는 필요한 보정을 거쳐
+일본어로 번역됩니다.
 
 번역된 일본어 입력을 Ollama 기반 LLM에 전달하고,
 AI가 생성한 응답이 자연스러운 일본어로만 이루어졌는지 검사합니다.
@@ -142,7 +149,7 @@ Gemini API로 한국어 자막을 생성해 화면에 표시합니다.
 Gemini 호출 또는 결과 검증이 실패하면 기존 Ollama Qwen 번역을 사용합니다.
 
 감정 분석 결과에 따라 음성 속도와 스타일을 조절하며,
-추후 VTube Studio의 표정과 모션에도 연결할 예정입니다.
+VTube Studio에서는 감정별 표정과 음성에 맞는 입 움직임을 적용합니다.
 
 ---
 
@@ -171,6 +178,7 @@ SBV2에서 transformers 4.51.3을 사용한다면 BERT 로딩의 fp32 지정은
 | SBV2 모델 위치 | `SBV2-KR-master/configs/paths.yml`의 `assets_root: model_assets`, 기존 개인 모델 유지 |
 | 앱 TTS | 프로젝트 `tts_config.json`: `backend: sbv2`, `sbv2.api_url: http://127.0.0.1:5001`, `fallback_to_cosyvoice: false` |
 | Gemini | 프로세스 환경변수 `GEMINI_API_KEY`, 모델 `gemini-3.5-flash-lite`, REST `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent` |
+| STT | 웹 마이크 입력 시 선택형 `requirements-stt.txt`와 `AI_WAIFU_STT_MODEL` 로컬 모델 경로 사용. 모델은 Git에 포함하지 않음 |
 | 재생 | macOS `afplay`, 프로젝트 `output.wav`를 매 합성 시 교체 |
 
 1. Ollama 앱 또는 기존 서버를 실행합니다. 이미 실행 중이면 새 서버를 띄우지 않습니다.
@@ -241,6 +249,11 @@ CLI와 API는 동시에 실행하지 않습니다. Gemini 키는 실행할 터�
 API 주소는 `http://127.0.0.1:8000`, API 문서는 `/docs`입니다.
 키 숨김 입력을 포함한 실행 안내는 [backend/README.md](backend/README.md),
 요청·응답과 WebSocket 명세는 [docs/backend-api.md](docs/backend-api.md)를 참고합니다.
+웹 마이크를 쓰려면 서버를 시작하기 전에 `AI_WAIFU_STT_MODEL`에 이미 준비된
+다국어 STT 모델 디렉터리를 지정합니다. 모델 자동 다운로드는 없습니다.
+마이크 권한은 브라우저가 요청하며, 녹음은 최대 20초입니다. 전사 결과는
+입력창에서 확인·수정한 뒤 전송합니다. 마이크 취소·무음·전사 실패 시
+키보드 입력을 계속 사용할 수 있습니다.
 
 VTS 단독 표정 검수 명령은 아래와 같습니다. 기존 기본 4초 동작을 유지합니다.
 
@@ -262,6 +275,9 @@ Node 조건·설치·검수 방법은 [frontend/README.md](frontend/README.md)�
 ```
 
 프론트엔드 자동 테스트는 `frontend/`에서 `npm test`로 실행합니다.
+Mac에서 웹 STT 정상 대화와 Gemini 채택, SBV2 음성, VTS 입 움직임,
+음성 종료 후 입력 복귀 및 녹음 취소 후 키보드 입력을 확인했습니다.
+Windows 실환경 검수와 시작 직후 짧은 입 움직임 멈춤의 원인 확인은 남아 있습니다.
 
 ---
 
@@ -330,7 +346,7 @@ AI_Waifu_System/
 │   ├── voice/
 │   │   ├── tts.py
 │   │   ├── audio_playback.py
-│   │   └── stt.py                  # 구현 예정
+│   │   └── stt.py                  # 선택형 로컬 한국어 전사
 │   └── character/
 │       ├── emotion.py
 │       └── vts.py                  # 표정·립싱크
@@ -338,7 +354,8 @@ AI_Waifu_System/
 ├── frontend/                       # React 대화 화면·독립 미리보기
 ├── docs/
 ├── requirements.txt
-└── requirements-api.txt
+├── requirements-api.txt
+└── requirements-stt.txt            # 선택형 로컬 STT 의존성
 ```
 
 ### 이동된 주요 파일 경로

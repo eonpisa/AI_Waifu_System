@@ -16,7 +16,7 @@ export const errors: Record<string, string> = {
   empty_tts_text: '읽을 문장이 없어 음성을 재생하지 않았어요.',
   turn_failed: '이번 대화를 처리하지 못했어요. 다음 이야기를 입력할 수 있어요.',
 }
-const stages = new Set<Stage>(['idle', 'queued', 'translating_input', 'generating',
+const stages = new Set<Stage>(['idle', 'queued', 'transcribing_audio', 'translating_input', 'generating',
   'translating_subtitle', 'synthesizing', 'speaking', 'ended'])
 type ObjectData = Record<string, unknown>
 function object(value: unknown): value is ObjectData {

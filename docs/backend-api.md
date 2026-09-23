@@ -153,3 +153,34 @@ API 테스트는 기존 환경의 httpx 0.28.1/TestClient를 사용하고 실제
 진행 중 상태 응답, WS 해제, 오류 복구, 종료 대기, 정보 노출 제한을 검증한다.
 실제 Gemini·SBV2·VTS 한 턴 검수는 별도로 진행하고 청취·입 움직임은 사용자가
 확인한다. React 실제 환경 검수, 재접속 복원, 즉시 취소, 다중 세션, Tauri는 후속 작업이다.
+## 선택형 음성 입력
+
+브라우저에서 녹음한 음성은 `POST /api/transcribe`로 로컬 Python에 전달한다.
+인식 결과는 입력창의 초안이며, 사용자가 전송하기 전에는 대화 기록이나 LLM에 넣지 않는다.
+
+- 요청: WAV/WebM/MP4/Ogg 오디오 본문. `Content-Type`은 `audio/wav`, `audio/webm`,
+  `audio/mp4`, `audio/ogg` 중 하나이며 multipart 업로드가 아니다.
+- 성공: `200 {"text": "한국어 전사문"}`. 응답은 `Cache-Control: no-store`.
+- 실패: `409` 처리 중/세션 종료, `413` 용량 초과, `415` 형식 미지원,
+  `422` 모델 미설정·누락, 무음, 전사 실패 등 고정 오류 코드.
+- 최대 업로드 20MiB, 업로드 대기 15초, 디코딩한 음성 최대 30초.
+  화면 녹음은 20초에서 자동 종료한다.
+- 전사 중 HTTP와 WS 상태는 `busy=true`, `stage=transcribing_audio`이다.
+  기존 단일 작업자를 공유하므로 대화·다른 전사 요청은 겹치지 않는다.
+- 녹음 파일은 시스템 임시 폴더에서 처리한 뒤 삭제한다. HTTP 연결이 끊어져도
+  진행 중인 로컬 추론이 끝나야 파일과 예약을 해제한다. 즉시 추론 취소는 제공하지 않는다.
+- 음성·전사문·모델 경로를 로그에 기록하지 않는다. 모델 경로는 HTTP/WS에 보내지 않는다.
+
+STT 의존성은 기본 의존성과 별개인 루트 `requirements-stt.txt`에 있다.
+이미 설치된 환경은 재설치할 필요가 없다. CTranslate2 형식의 다국어 Whisper 모델을
+로컬에 준비하고, API를 실행하는 터미널에서 경로를 지정한다.
+
+```sh
+export AI_WAIFU_STT_MODEL="$PWD/local_checks/stt_models/faster-whisper-base"
+.venv/bin/python -B -m backend
+```
+
+위 경로는 Git에서 제외되는 로컬 준비 위치의 예다. 모델 파일은 저장소에 포함하지 않으며
+위 실행 명령이 모델을 다운로드하지 않는다. Gemini를 사용하는 대화 검수에서는
+기존 키 숨김 입력 실행 절차에도 같은 환경변수를 적용한다.
+CPU int8 전사로 시작하며 실제 마이크 정확도·속도와 Windows 동작은 별도 검수한다.

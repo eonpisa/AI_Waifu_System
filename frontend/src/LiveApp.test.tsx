@@ -21,6 +21,34 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
+it('places microphone transcription in the draft and waits for explicit send', async () => {
+  const stopTrack = vi.fn()
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+    getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] }),
+  } })
+  class Recorder {
+    static isTypeSupported = () => true
+    state = 'inactive'
+    ondataavailable?: (event: { data: Blob }) => void
+    onstop?: () => void
+    start() { this.state = 'recording' }
+    stop() { this.state = 'inactive'; this.ondataavailable?.({ data: new Blob(['audio']) }); this.onstop?.() }
+  }
+  vi.stubGlobal('MediaRecorder', Recorder)
+  vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ text: '오늘 시험을 봤어.' }) } as Response)
+  render(<App />)
+  Socket.instances.at(-1)!.emit('state', 0, { busy: false, accepting: true, stage: 'idle' })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '음성 입력 시작' })) })
+  expect(screen.getByRole('textbox')).toBeDisabled()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '녹음 종료' })) })
+  expect(screen.getByRole('textbox')).toHaveValue('오늘 시험을 봤어.')
+  expect(screen.getByRole('log')).toBeEmptyDOMElement()
+  expect(screen.getByRole('button', { name: '전송' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '음성 입력 시작' })).toBeDisabled()
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(stopTrack).toHaveBeenCalled()
+})
+
 it('connects the default screen through HTTP/WS, keeps IME protection, and returns focus after a real-format result', async () => {
   const audio = vi.spyOn(HTMLMediaElement.prototype, 'play')
   const storage = vi.spyOn(Storage.prototype, 'setItem')

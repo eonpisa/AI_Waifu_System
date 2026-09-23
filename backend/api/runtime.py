@@ -102,6 +102,27 @@ class Runtime:
             self.subtitle_provider = {**data, "turn_id": self.turn_id}
         self.publish(event.kind, data)
 
+    def start_transcription(self, work):
+        """Reserve the same single worker without adding a conversation turn."""
+        if not self.accepting:
+            raise TurnRejected("session_ended")
+        if self.busy:
+            raise TurnRejected("busy")
+        self.busy = True
+        self.stage = "transcribing_audio"
+        self.publish("state", self.state())
+
+        async def run():
+            try:
+                return await work()
+            finally:
+                self.busy = False
+                self.stage = "idle" if self.accepting else "ended"
+                self.publish("state", self.state())
+
+        self.task = asyncio.create_task(run())
+        return self.task
+
     async def run(self, text):
         original = [dict(message) for message in self.session.messages]
 

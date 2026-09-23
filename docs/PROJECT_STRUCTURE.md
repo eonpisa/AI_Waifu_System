@@ -33,7 +33,7 @@ Gemini 키는 실행 프로세스의 환경변수로만 전달합니다.
 | `backend/conversation/japanese_response.py` | 일본어 응답 검증·재생성 |
 | `backend/translation/translator.py`, `gemini_translator.py` | 입력 변환과 Gemini/Qwen 자막 번역 |
 | `backend/voice/tts.py`, `audio_playback.py` | 음성 합성·로컬 WAV 재생 |
-| `backend/voice/stt.py` | 구현 예정인 음성 입력 자리 |
+| `backend/voice/stt.py` | 선택형 로컬 모델을 사용한 한국어 녹음 전사. 웹 녹음은 `/api/transcribe`로 전달 |
 | `backend/character/emotion.py` | 감정 판정·음성용 문장 처리 |
 | `backend/character/vts.py` | VTS 인증·표정·WAV 음량 기반 립싱크 |
 | `backend/service_status.py` | 요청별 서비스 결과·번역기 정보를 안전한 공개 코드로 전달 |
@@ -48,6 +48,7 @@ Gemini 키는 실행 프로세스의 환경변수로만 전달합니다.
   `frontend/`에서 `npm test`로 실행합니다.
 - `requirements.txt`: CLI·API·자동 테스트의 직접 의존성. API 목록을 포함하며 SBV2 서버 설치 목록은 아닙니다.
 - `requirements-api.txt`: FastAPI와 API 실행·데이터 처리에 필요한 패키지 목록입니다.
+- `requirements-stt.txt`: 웹 마이크 입력에만 필요한 선택형 로컬 STT 의존성입니다. 모델 파일은 별도 준비합니다.
 - `frontend/package.json`, `package-lock.json`: 프론트엔드 의존성과 고정된 설치 버전입니다.
 - [backend/README.md](../backend/README.md): 백엔드 역할·실행·주요 API·주의사항.
 - [docs/backend-api.md](backend-api.md): 요청·응답·WebSocket·오류·종료 처리 상세 명세.

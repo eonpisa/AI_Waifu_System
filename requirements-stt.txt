@@ -1,0 +1,3 @@
+# Optional local Korean speech recognition. The model is supplied separately.
+# This is not part of the CLI/API base dependency set and downloads no model.
+faster-whisper==1.0.3

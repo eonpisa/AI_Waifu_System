@@ -7,6 +7,7 @@ import { useConversationPreview } from './useConversationPreview'
 import { useConversation } from './useConversation'
 import { fallbackLabel, observationDetail, observationLabel, unknownServices } from './serviceStatus'
 import type { Services, SubtitleProvider } from './serviceStatus'
+import { useMicrophone } from './useMicrophone'
 
 const services = [
   ['ollama', 'Ollama', '대화와 입력 번역'], ['gemini', 'Gemini', '한국어 자막'],
@@ -38,7 +39,11 @@ function ConversationScreen({ chat, preview = false }: { chat: Chat; preview?: b
   const nearBottom = useRef(true)
   const wasBusy = useRef(false)
   const ended = chat.stage === 'ended'
-  const inputDisabled = chat.busy || ended || !chat.connected || !chat.accepting
+  const mic = useMicrophone(!preview && chat.connected && chat.accepting && !ended, chat.busy, text => {
+    setDraft(text)
+    input.current?.focus()
+  })
+  const inputDisabled = chat.busy || mic.busy || ended || !chat.connected || !chat.accepting
 
   useEffect(() => {
     if (wasBusy.current && !chat.busy && !ended) input.current?.focus()
@@ -50,7 +55,7 @@ function ConversationScreen({ chat, preview = false }: { chat: Chat; preview?: b
 
   function submit(event?: FormEvent) {
     event?.preventDefault()
-    if (composing.current) return
+    if (composing.current || mic.busy) return
     if (chat.send(draft, scenario)) { setDraft(''); nearBottom.current = true }
   }
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -98,7 +103,7 @@ function ConversationScreen({ chat, preview = false }: { chat: Chat; preview?: b
     <main className="main-panel">
       <header className="topbar">
         <div><div className="eyebrow">YOUR EVERYDAY COMPANION</div><h1>우리의 대화<span className="title-dot">.</span></h1></div>
-        <button className="end-button" onClick={chat.end} disabled={ended || chat.ending || !chat.connected || !chat.accepting}><Icon name="stop" />{chat.ending ? '이번 답변 후 종료' : ended ? '종료됨' : '대화 종료'}</button>
+        <button className="end-button" onClick={() => { mic.cancel(); chat.end() }} disabled={ended || chat.ending || !chat.connected || !chat.accepting}><Icon name="stop" />{chat.ending ? '이번 답변 후 종료' : ended ? '종료됨' : '대화 종료'}</button>
       </header>
       <div className="preview-banner"><Icon name="info" /><span><strong>{preview ? '화면 미리보기' : '로컬 대화'}</strong><span className="banner-detail">{preview ? ' · 실제 AI·음성·캐릭터는 연결하지 않았어요.' : ' · 음성과 캐릭터는 Python을 실행한 컴퓨터에서 작동해요.'}</span></span><span className="preview-pill">{preview ? 'PREVIEW' : 'LOCAL'}</span></div>
 
@@ -110,7 +115,7 @@ function ConversationScreen({ chat, preview = false }: { chat: Chat; preview?: b
             <span className="welcome-caption">작은 이야기부터, 천천히</span>
             <h2>오늘은 어떤 하루였나요?</h2>
             <p>기뻤던 일도, 조금 지쳤던 순간도.<br />마음에 남은 이야기를 들려주세요.</p>
-            <div className="suggestions" aria-label="시작 문장 예시">{suggestions.map((text, index) => <button key={text} onClick={() => { setDraft(text); input.current?.focus() }}><span>{['☀', '✧', '♧'][index]}</span>{['오늘 있었던 일', '기분 좋은 소식', '내일의 작은 계획'][index]}<Icon name="arrow" /></button>)}</div>
+            <div className="suggestions" aria-label="시작 문장 예시">{suggestions.map((text, index) => <button key={text} disabled={mic.busy} onClick={() => { setDraft(text); input.current?.focus() }}><span>{['☀', '✧', '♧'][index]}</span>{['오늘 있었던 일', '기분 좋은 소식', '내일의 작은 계획'][index]}<Icon name="arrow" /></button>)}</div>
           </div> : null}
           <div className="messages" role="log" aria-label="대화 기록" aria-live="polite" aria-relevant="additions text">
             {chat.messages.map(message => <article key={message.id} className={`message ${message.role}`}>
@@ -141,8 +146,16 @@ function ConversationScreen({ chat, preview = false }: { chat: Chat; preview?: b
           <form className={`composer ${inputDisabled ? 'composer-disabled' : ''}`} onSubmit={submit}>
             <label className="sr-only" htmlFor="message-input">한국어 메시지</label>
             <textarea id="message-input" ref={input} value={draft} disabled={inputDisabled} maxLength={2000} rows={2} placeholder={ended ? '종료된 대화예요.' : chat.busy ? '답변을 준비하고 있어요…' : '편하게 이야기해 주세요…'} onChange={event => setDraft(event.target.value)} onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} onKeyDown={keyDown} aria-describedby="input-help" />
-            <div className="composer-toolbar"><span className="mic-group"><button type="button" className="mic-button" disabled aria-label="음성 입력 — 준비 중" title="음성 입력은 후속 단계에서 제공됩니다"><Icon name="mic" /></button><span>음성 입력 준비 중</span></span><span className="composer-actions"><span className="character-count">{draft.length.toLocaleString()} / 2,000</span><button type="submit" className="send-button" disabled={inputDisabled || !draft.trim()}><span>전송</span><Icon name="arrow" /></button></span></div>
+            <div className="composer-toolbar"><span className="mic-group"><button type="button" className="mic-button"
+              disabled={preview || (mic.phase !== 'recording' && (inputDisabled || !!draft.trim()))}
+              onClick={() => mic.phase === 'recording' ? mic.stop() : void mic.start()}
+              aria-label={preview ? '음성 입력 — 준비 중' : mic.phase === 'recording' ? '녹음 종료' : '음성 입력 시작'}
+              title="최대 20초 녹음 후 내용을 확인하고 전송합니다. 입력창이 비어 있을 때 시작할 수 있습니다."><Icon name={mic.phase === 'recording' ? 'stop' : 'mic'} /></button>
+              <span>{preview ? '음성 입력 준비 중' : mic.phase === 'recording' ? '녹음 중 · 최대 20초' : mic.phase === 'transcribing' ? '음성 인식 중' : mic.phase === 'permission' ? '마이크 허용 대기' : '음성 입력'}</span>
+              {mic.busy && <button type="button" className="text-button" onClick={mic.cancel}>녹음 취소</button>}
+              </span><span className="composer-actions"><span className="character-count">{draft.length.toLocaleString()} / 2,000</span><button type="submit" className="send-button" disabled={inputDisabled || !draft.trim()}><span>전송</span><Icon name="arrow" /></button></span></div>
           </form>
+          {!preview && mic.notice && <p className="muted small" role="status">{mic.notice}</p>}
           {!preview && chat.elapsedMs !== null && <p className="muted small">처리 시간 {(chat.elapsedMs / 1000).toFixed(2)}초 · 서버 접수부터 재생 종료까지 · 재생 함수 {chat.audioPlayed ? '성공' : '미완료'}</p>}
           <div className="composer-footer"><span id="input-help"><kbd>Enter</kbd> 전송 <span className="footer-separator">·</span> <kbd>Shift + Enter</kbd> 줄바꿈</span><span>{preview ? '이야기는 이 창에서만 머물러요.' : '자막 번역에는 Gemini가 사용될 수 있어요.'}</span></div>
         </div>
