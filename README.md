@@ -67,7 +67,7 @@ Character System을 결합하여
 ## 캐릭터 시스템 (Character System)
 
 * 🟢 감정별 표정 프리셋
-* 🟡 VTube Studio 연동
+* 🟢 VTube Studio 연동
 
   * API 연결과 표정 적용 코드는 구현되어 있음
   * 메인 실행 흐름 연결 및 안정화 작업 예정
