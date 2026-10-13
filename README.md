@@ -44,6 +44,7 @@ Character System을 결합하여
 * 🟢 대화 중 일본어·한국어·중국어 등 혼합 언어 감지
 * 🟢 현재 실행 중인 대화의 단기 기록 관리
 * 🟢 감정 분석 시스템
+* 🟢 React·TypeScript 기반 웹 대화 화면과 실시간 진행 상태 표시
 * 🟡 일본어 → 한국어 자막 번역 품질 개선
 * 🟢 웹 화면의 한국어 STT 음성 입력
 
@@ -261,10 +262,21 @@ VTS 단독 표정 검수 명령은 아래와 같습니다. 기존 기본 4초 �
 .venv/bin/python -B -m backend.character.vts
 ```
 
-React 화면은 기본적으로 로컬 API에 연결합니다. 위 안내대로 서비스와 API를 실행한 뒤
-`frontend/`에서 `npm run dev`로 실행하고 `http://127.0.0.1:5173/`에 접속합니다.
-서비스 없이 화면만 보려면 `http://127.0.0.1:5173/?preview=1`을 사용합니다.
-Node 조건·설치·검수 방법은 [frontend/README.md](frontend/README.md)를 참고합니다.
+React 화면은 기본적으로 로컬 API에 연결합니다. Node 조건은 `^24.15.0 || >=26.0.0`입니다.
+위 안내대로 서비스와 API를 실행한 뒤, 다른 터미널에서 프론트엔드를 실행합니다.
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+이미 의존성이 설치돼 있다면 `npm run dev`만 실행합니다.
+실제 대화는 `http://127.0.0.1:5173/`, 서비스 없이 화면만 보려면
+`http://127.0.0.1:5173/?preview=1`에 접속합니다.
+입력은 Enter로 전송하고 Shift+Enter로 줄을 바꿉니다.
+한국어 자막은 캐릭터 답변 본문에 표시하며, 일본어는 `원문 보기`에서 펼칩니다.
+화면·마이크·연결 동작과 검수 방법은 [프론트엔드 상세 안내](docs/frontend.md)를 참고합니다.
 
 ## 테스트 실행
 
@@ -274,7 +286,14 @@ Node 조건·설치·검수 방법은 [frontend/README.md](frontend/README.md)�
 .venv/bin/python -B -m unittest discover -s tests -q
 ```
 
-프론트엔드 자동 테스트는 `frontend/`에서 `npm test`로 실행합니다.
+프론트엔드 테스트와 TypeScript 검사·빌드는 `frontend/`에서 실행합니다.
+
+```bash
+cd frontend
+npm test
+npm run build
+```
+
 Mac에서 웹 STT 정상 대화와 Gemini 채택, SBV2 음성, VTS 입 움직임,
 음성 종료 후 입력 복귀 및 녹음 취소 후 키보드 입력을 확인했습니다.
 Windows 실환경 검수와 시작 직후 짧은 입 움직임 멈춤의 원인 확인은 남아 있습니다.
@@ -286,6 +305,12 @@ Windows 실환경 검수와 시작 직후 짧은 입 움직임 멈춤의 원인 
 ## 언어 (Language)
 
 * Python
+* TypeScript
+
+## 웹 화면 (Frontend)
+
+* React + Vite
+* FastAPI HTTP·WebSocket을 통한 입력·응답·진행 상태 전달
 
 ## AI 및 번역 (AI & Translation)
 
@@ -376,6 +401,8 @@ AI_Waifu_System/
 각 Python 패키지에는 부작용 없는 `__init__.py`가 있습니다. 루트에 이전 모듈의
 호환용 복제 파일은 남기지 않았습니다. 자세한 역할은
 [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)에 정리했습니다.
+상세 실행 설정은 [프로젝트 상세 안내](docs/project-guide.md),
+웹 화면의 동작과 검수 방법은 [프론트엔드 상세 안내](docs/frontend.md)를 참고합니다.
 
 실행 과정에서 생성되거나 개인 설정이 포함되는
 `output.wav`, `tts_config.json`, `vts_token.txt`, TTS 모델 파일 등은

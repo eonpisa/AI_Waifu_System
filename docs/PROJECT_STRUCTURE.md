@@ -52,7 +52,7 @@ Gemini 키는 실행 프로세스의 환경변수로만 전달합니다.
 - `frontend/package.json`, `package-lock.json`: 프론트엔드 의존성과 고정된 설치 버전입니다.
 - [backend/README.md](../backend/README.md): 백엔드 역할·실행·주요 API·주의사항.
 - [docs/backend-api.md](backend-api.md): 요청·응답·WebSocket·오류·종료 처리 상세 명세.
-- [frontend/README.md](../frontend/README.md): 화면 실행·미리보기·Node 조건·검수 방법.
+- [docs/frontend.md](frontend.md): 화면 실행·미리보기·Node 조건·검수 방법.
 
 ## Git에 포함하지 않는 파일
 
